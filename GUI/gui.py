@@ -15,7 +15,7 @@ class Custom_Frontend(Front_End):
         self.pages['main'] = Page1(self.scene, "The Main Page")
 
     def build_listeners(self):
-        self.add_listener("backend ping", self.on_backend_ping)
+        self.add_listener("scatterplot data", self.on_scatterplot_data)
 
     def on_user_event(self, event):
         if event["event_type"] == "pointer_move":
@@ -23,9 +23,7 @@ class Custom_Frontend(Front_End):
             self.update_shared_dict("pointer position", (x, y))
 
     def process_shared_dict(self):
-        scatterplot = self.pages['main'].get("My Scatterplot")
-        scatterplot_data = self.shared.get("scatterplot data")
-        scatterplot.receive_data(scatterplot_data)
+        pass
 
     def one_frame(self):
         if not self.should_it_render():
@@ -70,3 +68,7 @@ class Custom_Frontend(Front_End):
     
     def on_backend_ping(self, data):
         print(f"Frontend received backend ping with data: {data}")
+
+    def on_scatterplot_data(self, data):
+        scatterplot = self.pages['main'].get("My Scatterplot")
+        scatterplot.receive_data(data)

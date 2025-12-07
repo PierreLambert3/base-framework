@@ -1,7 +1,7 @@
 import numpy as np
 import time
 from rendercanvas.auto import loop
-from GUI.engine.comms import _Receiver, _Sender, _Shared_dict, _Listeners
+from GUI.engine.comms import _Listeners, Communications
 from GUI.engine.frontend.scene import Scene
 
 class Front_End:
@@ -16,9 +16,7 @@ class Front_End:
 
         # 2. communication
         self.listeners = _Listeners()
-        self.receiver  = _Receiver(queue_from_backend, self.listeners) # from back end
-        self.sender    = _Sender(queue_to_backend)     # to back end
-        self.shared    = _Shared_dict(shared_dict)
+        self.comms     = Communications(queue_from_backend, queue_to_backend, shared_dict, self.listeners)
         self.add_listener("exit program", self.exit_program)
 
         # 3. pages and elements
@@ -67,23 +65,23 @@ class Front_End:
             "key_up"
         )
 
+    def exit_program(self, data):
+        print("---  Front_End: exit_program received, this should be implemented in the derived class!  ---")
+    
+    def send(self, event_name, event_data=None, min_interval_s=0.0):
+        self.comms.send(event_name, event_data)
+
+    def process_messages(self):
+        self.comms.process_messages()
+
+    def update_shared_dict(self, key, value):
+        self.comms.shared.set(key, value)
+
+    def process_shared_dict(self):
+        raise Exception("--- Back_End.process_shared_dict() should be implemented in the derived class! ---")
+
     def add_listener(self, event_name, callback):
         self.listeners.add(event_name, callback)
 
-    def exit_program(self, data):
-        print("---  Front_End: exit_program received, this should be implemented in the derived class!  ---")
-
-    def send(self, event_name, event_data=None, min_interval_s=0.0):
-        self.sender.send(event_name, event_data, min_interval_s)
-
-    def process_messages(self):
-        self.receiver.process()
-
-    def process_shared_dict(self):
-        raise Exception("--- Front_End.process_shared_dict() should be implemented in the derived class! ---")
-    
-    def update_shared_dict(self, key, value):
-        self.shared.set(key, value)
-
-    def read_shared_dict(self, key, value):
-        self.shared.set(key, value)
+    def read_shared_dict(self, key, default=None):
+        return self.comms.shared.get(key, default=default)

@@ -13,18 +13,20 @@ class Custom_Backend(Back_End):
             import time
             time.sleep(0.05)
 
-            self.process_messages()    # from Queue (careful not to saturate the queue)
-            self.process_shared_dict() # from shared dict
-            self.send_messages()       # to Queue
-            self.update_shared_variables() # to shared dict
+            # 1. receive things / read from shared dict
+            self.process_messages()
+            self.process_shared_dict()
 
+            # 2. send things / write to shared dict
+            self.send_messages()
+            self.update_shared_variables()
 
     def send_messages(self):
-        self.send("backend ping", "Ping from backend", min_interval_s=0.5)
+        scatterplot_data = np.random.rand(1_000_000, 3).astype(np.float32) * 2 - 1
+        self.send("scatterplot data", scatterplot_data)
     
     def update_shared_variables(self):
-        scatterplot_data = np.random.rand(1_000_000, 3).astype(np.float32) * 2 - 1
-        self.update_shared_dict("scatterplot data", scatterplot_data)
+        pass
 
     def build_listeners(self):
         self.add_listener("frontend ping", self.on_frontend_ping)
@@ -33,4 +35,4 @@ class Custom_Backend(Back_End):
         print(f"Backend received frontend ping with data: {data}")
 
     def process_shared_dict(self):
-        self.mouse_position = self.shared.get("pointer position", (0, 0))
+        self.mouse_position = self.read_shared_dict("pointer position", (0, 0))
