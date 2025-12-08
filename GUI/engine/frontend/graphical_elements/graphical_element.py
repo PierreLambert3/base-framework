@@ -29,7 +29,7 @@ class _GraphicalElement:
         if not self.is_page:
             return self.parent.scene
         return self._scene
-
+    
     def die(self):
         print("Deleting element:", self.name)
 

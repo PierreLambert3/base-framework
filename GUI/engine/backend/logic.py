@@ -1,10 +1,15 @@
+import time
 from GUI.engine.comms import _Listeners, Communications
 
+DEAD_AFTER_S = 5.0
+
 class Back_End:
-    def __init__(self, queue_from_frontend, queue_to_frontend, shared_dict):
+    def __init__(self, multiprocessing_context, queue_from_frontend, queue_to_frontend, shared_dict):
+        self.multiprocessing_context = multiprocessing_context
         self.listeners = _Listeners()
         self.comms     = Communications(queue_from_frontend, queue_to_frontend, shared_dict, self.listeners)
         self.add_listener("exit program", self.exit_program)
+        self.running   = True
 
     def routine(self):
         pass
@@ -13,7 +18,8 @@ class Back_End:
         raise Exception("--- Back_End.build_listeners() should be implemented in the derived class! ---")
 
     def exit_program(self, data):
-        print("---  Back_End: exit_program received, this should be implemented in the derived class!  ---")
+        self.running = False
+        self.comms.send("exit program", None)
 
     def send(self, event_name, event_data=None, min_interval_s=0.0):
         self.comms.send(event_name, event_data)

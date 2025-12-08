@@ -1,4 +1,5 @@
 from GUI.engine.frontend.graphical_elements.graphical_element import _GraphicalElement
+import pygfx
 
 class Page(_GraphicalElement):
     def __init__(self, scene, unique_name, bl_xyz_px, size_xyz_px):
@@ -8,6 +9,19 @@ class Page(_GraphicalElement):
         self.is_leaf          = False
         self.containers       = []
         self._containers_dict = {}
+
+        # Interaction mesh (to translate pointer coordinates to page coordinates)
+        self.scene.add(self._generate_pickable_mesh())
+
+        """
+        # Interaction: create an invisible but pickable mesh representing the page rectangle.
+        geom = screen.geometries.unit_rectangle_filled
+        mat  = gfx.MeshBasicMaterial(color="#000", opacity=0.0, pick_write=True)
+        mesh = gfx.Mesh(geom, mat)
+        mesh.local.scale    = (self.W_px, self.H_px, 0.1)
+        mesh.local.position = (self.W_px * 0.5, self.H_px * 0.5, self.z_px-0.2)
+        self.interacterable_mesh = mesh
+        """
 
     def draw(self, EMA_total_rendering_time):
         for container in self.containers:
@@ -34,3 +48,12 @@ class Page(_GraphicalElement):
         container.die()
         self.containers.remove(container)
         del self._containers_dict[container_name]
+
+    def _generate_pickable_mesh(self):
+        geom = pygfx.geometries.plane_geometry(width=1.0, height=1.0)
+        mat  = pygfx.MeshBasicMaterial(color="#000", opacity=0.0, pick_write=True)  # invisible but pickable
+        pick_mesh = pygfx.Mesh(geom, mat)
+        pick_mesh.local.scale    = (self.size[0], self.size[1], 0.01)
+        pick_mesh.local.position = self.center
+        self.pick_mesh = pick_mesh
+        return pick_mesh

@@ -35,6 +35,12 @@ class Scatterplot2D(Element_2d):
         elif n_new < self.n:
             raise Exception("Downsizing not implemented yet: need to set the rest of the points to some default value.")
 
+        sz     = self.sz
+        span   = min(sz[0], sz[1])
+        bl     = self.bl
+        min_xy, max_xy = np.min(positions_array[:, :2]), np.max(positions_array[:, :2])
+        positions_array = ((positions_array - min_xy) / (max_xy - min_xy + 1e-8)) * span + bl
+
         self.next_positions[:n_new, :] = positions_array.astype(np.float32)
         self.current_positions, self.next_positions = self.next_positions, self.current_positions
         self.positions_buffer.send_data(0, self.current_positions)

@@ -4,8 +4,13 @@ from rendercanvas.auto import loop
 from GUI.engine.comms import _Listeners, Communications
 from GUI.engine.frontend.scene import Scene
 
+from GUI.engine.backend.logic import DEAD_AFTER_S
+MIN_FPS    = 3.0 * 1.0 / (DEAD_AFTER_S)
+PING_EVERY = DEAD_AFTER_S / 4.0
+
 class Front_End:
-    def __init__(self, queue_from_backend, queue_to_backend, shared_dict, window_name="GUI Frontend Window"):
+    def __init__(self, multiprocessing_context, queue_from_backend, queue_to_backend, shared_dict, window_name="GUI Frontend Window"):
+        self.multiprocessing_context = multiprocessing_context
         self.window_name = window_name
 
         # 1. rendering
@@ -23,8 +28,11 @@ class Front_End:
         self.pages        = {}
         self.current_page = None
 
+        # 4. keep alive ping
+        self.last_ping = time.time()
+
     def set_fps(self, target_fps):
-        self.target_frametime = 1.0 / max(0.1, target_fps)
+        self.target_frametime = 1.0 / max(MIN_FPS, target_fps)
 
     def should_it_render(self):
         timestamp = time.time()
@@ -66,7 +74,15 @@ class Front_End:
         )
 
     def exit_program(self, data):
-        print("---  Front_End: exit_program received, this should be implemented in the derived class!  ---")
+        loop.stop()
+        self.scene.canvas.close()
+        self.comms.send("exit program", None)
+
+    def add_page(self, page_name, page_object):
+        assert page_name not in self.pages, f"Page with name '{page_name}' already exists."
+        self.pages[page_name] = page_object
+        if self.current_page is None:
+            self.current_page = page_object
     
     def send(self, event_name, event_data=None, min_interval_s=0.0):
         self.comms.send(event_name, event_data)
