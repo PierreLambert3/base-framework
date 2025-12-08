@@ -101,3 +101,15 @@ class Front_End:
 
     def read_shared_dict(self, key, default=None):
         return self.comms.shared.get(key, default=default)
+    
+    def manage_mouse_pointer_move_in_page(self, event, current_page, page_coords):
+        if self.current_page is not None:
+            self.current_page.manage_mouse_pointer_move(event, page_coords)
+
+    def manage_mouse_pointer_down_in_page(self, event, current_page, page_coords):
+        if self.current_page is not None:
+            self.current_page.manage_mouse_pointer_down(event, page_coords)
+
+    def manage_mouse_pointer_up_in_page(self, event, current_page, page_coords):
+        if self.current_page is not None:
+            self.current_page.manage_mouse_pointer_up(event, page_coords)

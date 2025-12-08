@@ -32,7 +32,12 @@ class Custom_Frontend(Front_End):
             if self.current_page is not None:
                 page_coords = self.scene.xy_on_mesh(screen_mouse_coords, self.current_page.pick_mesh)
                 if page_coords is not None:
-                    print("Pointer on page '{}' at coords: {}".format(self.current_page.name, page_coords), " FPS: " , np.round(1.0 / self.frame_time_EMA, 1))
+                    if event["event_type"] == "pointer_move":
+                        self.manage_mouse_pointer_move_in_page(event, self.current_page, page_coords)
+                    elif event["event_type"] == "pointer_down":
+                        self.manage_mouse_pointer_down_in_page(event, self.current_page, page_coords)
+                    elif event["event_type"] == "pointer_up":
+                        self.manage_mouse_pointer_up_in_page(event, self.current_page, page_coords)
             
 
     def process_shared_dict(self):

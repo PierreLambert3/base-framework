@@ -1,8 +1,10 @@
+from GUI.engine.frontend.graphical_elements.button import Button_2d
 from GUI.engine.frontend.page import Page
 from GUI.engine.frontend.graphical_elements.graphical_element import Container
 from GUI.engine.frontend.graphical_elements.scatterplot_2d import Scatterplot2D
 from GUI.engine.frontend.graphical_elements.parallelepiped import Parallelepiped
-from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten
+from GUI.engine.frontend.graphical_elements.button import Button_2d, Button_3d
+from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, PURPLE_LIGHT, PINK_ELECTRIC
 
 class Page1(Page):
     def __init__(self, scene, page_name, bl_xyz_px=(0,0,0), size_xyz_px=(1000, 800,0)):
@@ -19,3 +21,13 @@ class Page1(Page):
 
         self.get("Scatterplot Container").add(Container("Inner Container", self.get("Scatterplot Container"), (0.5, 0.5), (0.2, 0.2), borders=(1,1,1,1)))
         self.get("Inner Container").pos_xyz = (self.get("Inner Container").pos_xyz[0], self.get("Inner Container").pos_xyz[1], self.get("Inner Container").pos_xyz[2] + 100)
+
+        container = self.get("Inner Container")
+        btn = Button_2d("my_btn", container, (0.1, 0.6), (0.6, 0.2), text="Click Me", text_colour=interpolate_color(PURPLE_LIGHT, ORANGE_YELLOW, 0.4), colour=brighten(PINK_ELECTRIC, 0.7))
+        btn.register_hoverable()
+        btn.register_clickable()
+        btn.on_pointer_move_inside = lambda event, coords: print("Button hovered at", coords)
+
+        # 3D button
+        btn_px = (parallelepiped_xyz_px[0] + 150, parallelepiped_xyz_px[1] + 150, parallelepiped_xyz_px[2])
+        btn3d = Button_3d("my_3d_btn", container, btn_px, (200, 50, 30), text="3D Button", colour=PURPLE_LIGHT, text_colour=PINK_ELECTRIC)

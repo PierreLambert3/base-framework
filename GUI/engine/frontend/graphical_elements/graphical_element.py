@@ -6,14 +6,19 @@ from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_co
 
 class _GraphicalElement:
     def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None):
-        self.name      = unique_name
-        self.parent    = parent
-        self.pos_xyz   = center_xyz_px
-        self.size_xyz  = size_xyz_px
-        self.is_leaf   = True
-        self.colour    = colour if colour is not None else interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5)
-        self._rotation = (0, 0, 0, 1)  # quaternion (x, y, z, w) - identity rotation
+        self.name         = unique_name
+        self.parent       = parent
+        self.pos_xyz      = center_xyz_px
+        self.size_xyz     = size_xyz_px
+        self.is_leaf      = True
+        self.colour       = colour if colour is not None else interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5)
+        self._rotation    = (0, 0, 0, 1)  # quaternion (x, y, z, w) - identity rotation
         self._gfx_objects = []  # list of pygfx objects that need rotation applied
+        self.pagewise_xy  = self._make_page_coordinates()
+
+        self.on_pointer_move_inside  = None
+        self.on_pointer_down_inside  = None
+        self.on_pointer_up_inside    = None
 
     @property
     def size(self):
@@ -23,7 +28,6 @@ class _GraphicalElement:
     @property
     def center(self):
         return self.pos_xyz
-    
     
     @property
     def rotation(self):
@@ -44,10 +48,22 @@ class _GraphicalElement:
             return self.parent.scene
         return self._scene
     
+    @property
+    def page(self):
+        if self.is_page:
+            return self
+        return self.parent.page
+    
     def register_gfx_object(self, gfx_obj):
         self.scene.add(gfx_obj)
         self._gfx_objects.append(gfx_obj)
-         
+    
+    def register_hoverable(self):
+        self.page.hoverable_elements.append(self)
+
+    def register_clickable(self):
+        self.page.clickable_elements.append(self)
+
     def rotate(self, angles_rad, order="xyz"):
         """
         Rotate the element by Euler angles (in radians) around X, Y, Z axes.
@@ -73,7 +89,19 @@ class _GraphicalElement:
             gfx_obj.local.rotation = self._rotation
             # pygfx rotates around local origin, so we set position to center
             gfx_obj.local.position = self.center
+            
+    def _make_page_coordinates(self):
+        page_bl = self.page.bl if self.parent is not None else (0, 0, 0)
+        page_x = (self.bl[0] - page_bl[0]) if self.parent is not None else self.bl[0]
+        page_y = (self.bl[1] - page_bl[1]) if self.parent is not None else self.bl[1]
+        return (page_x, page_y)
     
+    def hit_by_page_coords(self, x, y): # in pixels in the page coordinate system
+        bl_x, bl_y = self.pagewise_xy
+        tr_x = bl_x + self.size[0]
+        tr_y = bl_y + self.size[1]
+        return (bl_x <= x <= tr_x) and (bl_y <= y <= tr_y)
+
     def die(self):
         print("Deleting element:", self.name)
         self._gfx_objects.clear()

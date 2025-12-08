@@ -12,30 +12,36 @@ class Page(_GraphicalElement):
         self._containers_dict = {}
 
         # border
-        # self.scene.add(self._generate_border())
         self.register_gfx_object(self._generate_border())
 
         # Interaction mesh (to translate pointer coordinates to page coordinates)
-        # self.scene.add(self._generate_pickable_mesh())
         self.register_gfx_object(self._generate_pickable_mesh())
 
-
-        """
-        # Interaction: create an invisible but pickable mesh representing the page rectangle.
-        geom = screen.geometries.unit_rectangle_filled
-        mat  = gfx.MeshBasicMaterial(color="#000", opacity=0.0, pick_write=True)
-        mesh = gfx.Mesh(geom, mat)
-        mesh.local.scale    = (self.W_px, self.H_px, 0.1)
-        mesh.local.position = (self.W_px * 0.5, self.H_px * 0.5, self.z_px-0.2)
-        self.interacterable_mesh = mesh
-        """
-
-    def draw(self, EMA_total_rendering_time):
-        for container in self.containers:
-            container.draw(EMA_total_rendering_time)
+        # clickable or hoverable elements
+        self.clickable_elements = []
+        self.hoverable_elements = []
+    
+    def manage_mouse_pointer_move(self, event, page_coords):
+        for element in self.hoverable_elements:
+            if element.hit_by_page_coords(page_coords[0], page_coords[1]):
+                print("Hovering over element:", element.name)
+                if element.on_pointer_move_inside is not None:
+                    element.on_pointer_move_inside(event, page_coords)
+    
+    def manage_mouse_pointer_down(self, event, page_coords):
+        for element in self.clickable_elements:
+            if element.hit_by_page_coords(page_coords[0], page_coords[1]):
+                if element.on_pointer_down_inside is not None:
+                    element.on_pointer_down_inside(event, page_coords)
+    
+    def manage_mouse_pointer_up(self, event, page_coords):
+        for element in self.clickable_elements:
+            if element.hit_by_page_coords(page_coords[0], page_coords[1]):
+                if element.on_pointer_up_inside is not None:
+                    element.on_pointer_up_inside(event, page_coords)
 
     def add_container(self, container):
-        assert container.name not in self._containers_dict, f"Container with name '{container.name}' already exists in page '{self.unique_name}'"
+        assert container.name not in self._containers_dict, f"Container with name '{container.name}' already exists in page '{self.name}'"
         self.containers.append(container)
         self._containers_dict[container.name] = container
 
