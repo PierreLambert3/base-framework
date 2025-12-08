@@ -1,5 +1,6 @@
 from GUI.engine.frontend.graphical_elements.graphical_element import _GraphicalElement
 import pygfx
+import numpy as np
 
 class Page(_GraphicalElement):
     def __init__(self, scene, unique_name, bl_xyz_px, size_xyz_px):
@@ -10,8 +11,12 @@ class Page(_GraphicalElement):
         self.containers       = []
         self._containers_dict = {}
 
+        # border
+        self.scene.add(self._generate_border())
+
         # Interaction mesh (to translate pointer coordinates to page coordinates)
         self.scene.add(self._generate_pickable_mesh())
+
 
         """
         # Interaction: create an invisible but pickable mesh representing the page rectangle.
@@ -53,7 +58,27 @@ class Page(_GraphicalElement):
         geom = pygfx.geometries.plane_geometry(width=1.0, height=1.0)
         mat  = pygfx.MeshBasicMaterial(color="#000", opacity=0.0, pick_write=True)  # invisible but pickable
         pick_mesh = pygfx.Mesh(geom, mat)
-        pick_mesh.local.scale    = (self.size[0], self.size[1], 0.01)
-        pick_mesh.local.position = self.center
+        pick_mesh.local.scale    = (self.size[0], self.size[1], 0.001)
+        pick_mesh.local.position = (self.center[0], self.center[1], self.center[2]-0.5)
         self.pick_mesh = pick_mesh
         return pick_mesh
+
+    def _generate_border(self):
+        # Get bottom-left corner and size
+        bl = self.bottom_left
+        w, h = self.size[0], self.size[1]
+        z = bl[2]
+        
+        # Define 4 corners: bottom-left, bottom-right, top-right, top-left, back to bottom-left
+        positions = np.array([
+            [bl[0],     bl[1],     z],  # bottom-left
+            [bl[0] + w, bl[1],     z],  # bottom-right
+            [bl[0] + w, bl[1] + h, z],  # top-right
+            [bl[0],     bl[1] + h, z],  # top-left
+            [bl[0],     bl[1],     z],  # back to bottom-left (close the loop)
+        ], dtype=np.float32)
+        
+        geom = pygfx.Geometry(positions=positions)
+        mat  = pygfx.LineMaterial(color="white", thickness=2.0, aa=True)
+        self.border_line = pygfx.Line(geom, mat)
+        return self.border_line

@@ -8,12 +8,8 @@ class Custom_Backend(Back_End):
 
     def routine(self):
         self.build_listeners()
-        scatterplot_data = np.random.rand(1_000_000, 3).astype(np.float32) * 2 - 1
 
         while self.running:
-            import time
-            time.sleep(0.05)
-
             # 1. receive things / read from shared dict
             self.process_messages()
             self.process_shared_dict()

@@ -11,8 +11,8 @@ class Scene:
         self.scene    = pygfx.Scene()
 
         # Camera (simple perspective)
-        self.camera = pygfx.PerspectiveCamera(90)
-        self.camera.local.position = (window_size[0] / 2, window_size[1] / 2, 600)
+        self.camera = pygfx.PerspectiveCamera(50, aspect = window_size[0] / window_size[1])
+        self.camera.local.position = (0.92 * window_size[0] / 2, window_size[1] / 2, 1500)
         self.camera.look_at((window_size[0] / 2, window_size[1] / 2, 0))
         self.scene.add(self.camera)
 

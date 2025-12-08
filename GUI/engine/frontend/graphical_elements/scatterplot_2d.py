@@ -35,7 +35,7 @@ class Scatterplot2D(Element_2d):
         elif n_new < self.n:
             raise Exception("Downsizing not implemented yet: need to set the rest of the points to some default value.")
 
-        sz     = self.sz
+        """ sz     = self.sz
         span   = min(sz[0], sz[1])
         bl     = self.bl
         min_xy, max_xy = np.min(positions_array[:, :2]), np.max(positions_array[:, :2])
@@ -43,4 +43,47 @@ class Scatterplot2D(Element_2d):
 
         self.next_positions[:n_new, :] = positions_array.astype(np.float32)
         self.current_positions, self.next_positions = self.next_positions, self.current_positions
+        self.positions_buffer.send_data(0, self.current_positions) """
+
+
+
+       
+
+
+
+        """ sz = self.sz
+        bl = self.bl
+        
+        # Normalize each axis independently to [0, 1]
+        min_vals = np.min(positions_array[:, :2])
+        max_vals = np.max(positions_array[:, :2])
+        range_vals = max_vals - min_vals + 1e-8
+        # positions_array[:, :2] = (positions_array[:, :2] - min_vals) / range_vals  # [0, 1] range
+        
+        self.next_positions[:n_new, 0] = positions_array[:, 0] * sz[0] + bl[0]
+        self.next_positions[:n_new, 1] = positions_array[:, 1] * sz[1] + bl[1]
+        self.next_positions[:n_new, 2] = bl[2]  # Z stays at the element's z level
+        self.current_positions, self.next_positions = self.next_positions, self.current_positions
+        self.positions_buffer.send_data(0, self.current_positions) """
+
+        
+        sz = self.sz
+        bl = self.bl
+        
+        # Normalize each axis independently to [0, 1]
+        min_vals = np.min(positions_array[:, :2], axis=0)
+        max_vals = np.max(positions_array[:, :2], axis=0)
+        range_vals = max_vals - min_vals + 1e-8
+        
+        # Scale to fit within the scatterplot zone
+        normalized = (positions_array[:, :2] - min_vals) / range_vals  # [0, 1] range
+        
+        # Apply size and offset for X and Y independently
+        self.next_positions[:n_new, 0] = normalized[:, 0] * sz[0] + bl[0]
+        self.next_positions[:n_new, 1] = normalized[:, 1] * sz[1] + bl[1]
+        self.next_positions[:n_new, 2] = bl[2]  # Z stays at the element's z level
+        
+        self.current_positions, self.next_positions = self.next_positions, self.current_positions
         self.positions_buffer.send_data(0, self.current_positions)
+        
+       
