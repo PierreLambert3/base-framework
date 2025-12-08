@@ -12,10 +12,12 @@ class Page(_GraphicalElement):
         self._containers_dict = {}
 
         # border
-        self.scene.add(self._generate_border())
+        # self.scene.add(self._generate_border())
+        self.register_gfx_object(self._generate_border())
 
         # Interaction mesh (to translate pointer coordinates to page coordinates)
-        self.scene.add(self._generate_pickable_mesh())
+        # self.scene.add(self._generate_pickable_mesh())
+        self.register_gfx_object(self._generate_pickable_mesh())
 
 
         """
@@ -64,6 +66,7 @@ class Page(_GraphicalElement):
         return pick_mesh
 
     def _generate_border(self):
+        from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color
         # Get bottom-left corner and size
         bl = self.bottom_left
         w, h = self.size[0], self.size[1]
@@ -79,6 +82,6 @@ class Page(_GraphicalElement):
         ], dtype=np.float32)
         
         geom = pygfx.Geometry(positions=positions)
-        mat  = pygfx.LineMaterial(color="white", thickness=2.0, aa=True)
+        mat  = pygfx.LineMaterial(color=interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5), thickness=2.0, aa=True)
         self.border_line = pygfx.Line(geom, mat)
         return self.border_line

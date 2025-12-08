@@ -11,7 +11,7 @@ TESTING_PERFORMANCE = False
 class Custom_Frontend(Front_End):
     def __init__(self, multiprocessing_context, queue_from_backend, queue_to_backend, shared_dict, window_name="Custom GUI Frontend Window"):
         super().__init__(multiprocessing_context, queue_from_backend, queue_to_backend, shared_dict, window_name=window_name)
-        self.set_fps(24)
+        self.set_fps(10)
 
     def build_pages(self):
         self.add_page("main", Page1(self.scene, "The Main Page"))
@@ -22,7 +22,6 @@ class Custom_Frontend(Front_End):
     def on_user_event(self, event):
         mouse_event = (event["event_type"] == "pointer_move" or event["event_type"] == "pointer_down" or event["event_type"] == "pointer_up")
         
-        # mouse event
         if mouse_event:
             # 1. update pointer position in shared dict (raw screen coords)
             screen_mouse_coords = (event["x"], event["y"])
@@ -33,9 +32,8 @@ class Custom_Frontend(Front_End):
             if self.current_page is not None:
                 page_coords = self.scene.xy_on_mesh(screen_mouse_coords, self.current_page.pick_mesh)
                 if page_coords is not None:
-                    print("Pointer on page '{}' at coords: {}".format(self.current_page.name, page_coords))
+                    print("Pointer on page '{}' at coords: {}".format(self.current_page.name, page_coords), " FPS: " , np.round(1.0 / self.frame_time_EMA, 1))
             
-
 
     def process_shared_dict(self):
         pass
@@ -58,13 +56,34 @@ class Custom_Frontend(Front_End):
         else:
             self.process_messages()    # from Queue (careful not to saturate the queue)
             self.process_shared_dict() # from shared dict
+        # rotate elements for demo purposes
+        parallelepiped = self.pages['main'].get("My Parallelepiped")
+        parallelepiped.rotate((0.15, 0.05, 0.05))  # degrees per frame
+        inner_container = self.pages['main'].get("Inner Container")
+        inner_container.rotate((0.01, 0.05, 0.0))
+        # change bloom tint over time, just for the demo
+        if self.scene.bloom is not None:
+            # Animate bloom tint color over time
+            t = time.time()
+            bloom_tint = np.array([
+                0.5 + 0.5 * np.sin(t * 0.5),
+                0.5 + 0.5 * np.sin(t * 0.7 + 2.0),
+                0.5 + 0.5 * np.sin(t * 0.9 + 4.0),
+            ], dtype=np.float32)
+            # self.scene.bloom._uniform_data["color_center"] = (np.random.uniform(), np.random.uniform(), np.random.uniform())
+            self.scene.bloom.set_params(color_center=bloom_tint)
 
     def routine(self):
         # 1. initialisation
-        self.initialise_scene()
-        self.build_pages()
-        self.build_listeners()
-        self.register_user_event_listener(self.on_user_event)
+        try:
+            self.initialise_scene()
+            self.build_pages()
+            self.build_listeners()
+            self.register_user_event_listener(self.on_user_event)
+        except Exception as e:
+            print(f"--- Frontend initialisation error: {e} ---")
+            self.send("exit program", 1)
+            return
 
         # 2. Kickstart the loop
         self.scene.canvas.request_draw(self.one_frame)

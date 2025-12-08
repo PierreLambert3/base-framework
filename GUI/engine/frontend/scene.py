@@ -10,9 +10,32 @@ class Scene:
         self.renderer = pygfx.WgpuRenderer(self.canvas)
         self.scene    = pygfx.Scene()
 
+        # post processing effects
+        self.bloom = None
+        effect_passes = []
+        from GUI.engine.frontend.theme import POSTPROCESSING_BLOOM, POSTPROCESSING_NOISE, BLOOM_TINT
+        if POSTPROCESSING_NOISE: # noise effect
+            effect_passes.append(pygfx.renderers.wgpu.NoisePass(noise=0.012))
+        if POSTPROCESSING_BLOOM: # bloom effect
+            from GUI.engine.frontend.post_processing.bloom.bloom_pass import BloomPass
+            bloom = BloomPass(
+                depth=5,
+                threshold=0.4,
+                knee=0.2,
+                strength=20.0,
+                color_select=True,
+                color_center=BLOOM_TINT,  # Blue tint
+                color_sigma=0.95,  # Now acts as tint strength (0-1), 0.8 = strong tint
+            )
+            effect_passes.append(bloom)
+            self.bloom = bloom
+        if effect_passes:
+            self.renderer.effect_passes = tuple(list(self.renderer.effect_passes) + effect_passes)
+       
+
         # Camera (simple perspective)
         self.camera = pygfx.PerspectiveCamera(50, aspect = window_size[0] / window_size[1])
-        self.camera.local.position = (0.92 * window_size[0] / 2, window_size[1] / 2, 1500)
+        self.camera.local.position = (window_size[0] / 2, window_size[1] / 2, 1000)
         self.camera.look_at((window_size[0] / 2, window_size[1] / 2, 0))
         self.scene.add(self.camera)
 

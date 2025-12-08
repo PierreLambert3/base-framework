@@ -24,6 +24,7 @@ if __name__ == "__main__":
     backend  = Custom_Backend(ctx, front_to_back_queue, back_to_front_queue, shared_dict)
     backend.routine()  # <-- this is a blocking call
     back_to_front_queue.put(("exit program", None))
+    front_to_back_queue.put(("exit program", None))
 
     # 5.1 wait for frontend process
     frontend_process.join(timeout=2.0)

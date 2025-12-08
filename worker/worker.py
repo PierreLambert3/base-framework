@@ -1,6 +1,6 @@
 import numpy as np
 from GUI.engine.backend.logic import Back_End
-
+import time 
 
 class Custom_Backend(Back_End):
     def __init__(self, multiprocessing_context, queue_from_frontend, queue_to_frontend, shared_dict):
@@ -10,6 +10,8 @@ class Custom_Backend(Back_End):
         self.build_listeners()
 
         while self.running:
+            time.sleep(0.5)
+
             # 1. receive things / read from shared dict
             self.process_messages()
             self.process_shared_dict()
