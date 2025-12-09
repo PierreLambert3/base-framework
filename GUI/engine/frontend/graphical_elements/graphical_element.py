@@ -58,6 +58,18 @@ class _GraphicalElement:
         self.scene.add(gfx_obj)
         self._gfx_objects.append(gfx_obj)
 
+    def hide(self):
+        for gfx_obj in self._gfx_objects:
+            gfx_obj.visible = False
+    
+    def show(self):
+        for gfx_obj in self._gfx_objects:
+            gfx_obj.visible = True
+    
+    @property
+    def visible(self):
+        return all(gfx_obj.visible for gfx_obj in self._gfx_objects) if self._gfx_objects else True
+
     def rotate(self, angles_rad, order="xyz"):
         """
         Rotate the element by Euler angles (in radians) around X, Y, Z axes.
@@ -227,4 +239,12 @@ class Container(Element_2d):
         self.children_dict.clear()
         super().die()
 
+    def hide(self):
+        for child in self.children:
+            child.hide()
+        super().hide()
     
+    def show(self):
+        for child in self.children:
+            child.show()
+        super().show()

@@ -100,3 +100,13 @@ class Page(_GraphicalElement):
         mat  = pygfx.LineMaterial(color=interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5), thickness=2.0, aa=True)
         self.border_line = pygfx.Line(geom, mat)
         return self.border_line
+    
+    def hide(self):
+        for child in self.containers:
+            child.hide()
+        super().hide()
+    
+    def show(self):
+        for child in self.containers:
+            child.show()
+        super().show()

@@ -35,4 +35,7 @@ class Page1(Page):
 
     def hide_parallelepiped(self, event, element, page_coords):
         para = self.get("My Parallelepiped")
-        print("TODO: HIDE THE PARALLELEPIPED", para)
+        if para.visible:
+            para.hide()
+        else:
+            para.show()
