@@ -58,9 +58,23 @@ class Button_2d(Element_2d):
         self.scene.remove(self.text_obj)
         super().die()
 
+    def on_pointer_move_inside(self, event, page_coords):
+        super().on_pointer_move_inside(event, page_coords)
 
-class Button_3d(Parallelepiped):
-    """A 3D button (parallelepiped) with edges and centered text on the front face."""
+    def on_pointer_move_outside(self, event, page_coords):
+        super().on_pointer_move_outside(event, page_coords)
+
+    def on_pointer_down_inside(self, event, page_coords):
+        super().on_pointer_down_inside(event, page_coords)
+
+    def on_pointer_up_inside(self, event, page_coords):
+        super().on_pointer_up_inside(event, page_coords)
+
+    def stop_pointer_down_effect(self):
+        pass
+
+
+""" class Button_3d(Parallelepiped):
     
     def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, text,
                  colour=None, text_colour="white", font_size=16, edge_thickness=2.0):
@@ -92,4 +106,4 @@ class Button_3d(Parallelepiped):
     
     def die(self):
         self.scene.remove(self.text_obj)
-        super().die()
+        super().die() """

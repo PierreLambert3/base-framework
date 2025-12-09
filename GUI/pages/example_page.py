@@ -3,7 +3,7 @@ from GUI.engine.frontend.page import Page
 from GUI.engine.frontend.graphical_elements.graphical_element import Container
 from GUI.engine.frontend.graphical_elements.scatterplot_2d import Scatterplot2D
 from GUI.engine.frontend.graphical_elements.parallelepiped import Parallelepiped
-from GUI.engine.frontend.graphical_elements.button import Button_2d, Button_3d
+from GUI.engine.frontend.graphical_elements.button import Button_2d
 from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, PURPLE_LIGHT, PINK_ELECTRIC
 
 class Page1(Page):
@@ -26,8 +26,13 @@ class Page1(Page):
         btn = Button_2d("my_btn", container, (0.1, 0.6), (0.6, 0.2), text="Click Me", text_colour=interpolate_color(PURPLE_LIGHT, ORANGE_YELLOW, 0.4), colour=brighten(PINK_ELECTRIC, 0.7))
         btn.register_hoverable()
         btn.register_clickable()
-        btn.on_pointer_move_inside = lambda event, coords: print("Button hovered at", coords)
 
-        # 3D button
-        btn_px = (parallelepiped_xyz_px[0] + 150, parallelepiped_xyz_px[1] + 150, parallelepiped_xyz_px[2])
-        btn3d = Button_3d("my_3d_btn", container, btn_px, (200, 50, 30), text="3D Button", colour=PURPLE_LIGHT, text_colour=PINK_ELECTRIC)
+        btn.add_pointer_move_inside_callback(self.button_hovered)
+        btn.add_pointer_click_callback(self.hide_parallelepiped)
+
+    def button_hovered(self, event, element, page_coords):
+        print("button hovered!", element.name)
+
+    def hide_parallelepiped(self, event, element, page_coords):
+        para = self.get("My Parallelepiped")
+        print("TODO: HIDE THE PARALLELEPIPED", para)

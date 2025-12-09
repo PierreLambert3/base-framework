@@ -16,9 +16,9 @@ class _GraphicalElement:
         self._gfx_objects = []  # list of pygfx objects that need rotation applied
         self.pagewise_xy  = self._make_page_coordinates()
 
-        self.on_pointer_move_inside  = None
-        self.on_pointer_down_inside  = None
-        self.on_pointer_up_inside    = None
+        self._callback_on_pointer_move_inside    = None
+        self._callback_on_pointer_move_outside   = None
+        self._callback_pointer_click             = None
 
     @property
     def size(self):
@@ -57,12 +57,6 @@ class _GraphicalElement:
     def register_gfx_object(self, gfx_obj):
         self.scene.add(gfx_obj)
         self._gfx_objects.append(gfx_obj)
-    
-    def register_hoverable(self):
-        self.page.hoverable_elements.append(self)
-
-    def register_clickable(self):
-        self.page.clickable_elements.append(self)
 
     def rotate(self, angles_rad, order="xyz"):
         """
@@ -105,6 +99,50 @@ class _GraphicalElement:
     def die(self):
         print("Deleting element:", self.name)
         self._gfx_objects.clear()
+
+    def register_hoverable(self):
+        self.page.hoverable_elements.append(self)
+
+    def register_clickable(self):
+        self.page.clickable_elements.append(self)
+
+    def add_pointer_move_inside_callback(self, callback):
+        self._callback_on_pointer_move_inside = callback
+    
+    def add_pointer_move_outside_callback(self, callback):
+        self._callback_on_pointer_move_outside = callback
+
+    def add_pointer_click_callback(self, callback):
+        self._callback_pointer_click = callback
+
+    def on_pointer_move_inside(self, event, page_coords):
+        # 1. graphical things proper to this element
+        ...
+        # 2. user-defined callback
+        if self._callback_on_pointer_move_inside is not None:
+            self._callback_on_pointer_move_inside(event, self, page_coords)
+
+    def on_pointer_move_outside(self, event, page_coords):
+        # 1. graphical things proper to this element
+        ...
+        # 2. user-defined callback
+        if self._callback_on_pointer_move_outside is not None:
+            self._callback_on_pointer_move_outside(event, self, page_coords)
+
+    def on_pointer_down_inside(self, event, page_coords):
+        # graphical things proper to this element
+        ...
+
+    def on_pointer_up_inside(self, event, page_coords):
+        # 1. graphical things proper to this element
+        ...
+        # 2. user-defined callback
+        if self._callback_pointer_click is not None:
+            self._callback_pointer_click(event, self, page_coords)
+
+    def stop_pointer_down_effect(self):
+        # graphical things proper to this element
+        ...
 
 class Element_2d(_GraphicalElement):
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, colour=None): # pos_xy_rel: bottom-left corner

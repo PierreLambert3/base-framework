@@ -70,10 +70,11 @@ class Custom_Frontend(Front_End):
         if self.scene.bloom is not None:
             # Animate bloom tint color over time
             t = time.time()
+            t *= 2.5
             bloom_tint = np.array([
-                0.5 + 0.5 * np.sin(t * 0.5),
-                0.5 + 0.5 * np.sin(t * 0.7 + 2.0),
-                0.5 + 0.5 * np.sin(t * 0.9 + 4.0),
+                0.3 + 0.7 * np.sin(t * 0.5),
+                0.3 + 0.7 * np.sin(t * 0.7 + 2.0),
+                0.3 + 0.7 * np.sin(t * 0.9 + 4.0),
             ], dtype=np.float32)
             # self.scene.bloom._uniform_data["color_center"] = (np.random.uniform(), np.random.uniform(), np.random.uniform())
             self.scene.bloom.set_params(color_center=bloom_tint)
