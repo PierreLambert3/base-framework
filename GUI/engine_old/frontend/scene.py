@@ -9,7 +9,6 @@ class Scene:
         self.canvas   = RenderCanvas(title=canvas_title, size=window_size)
         self.renderer = pygfx.WgpuRenderer(self.canvas)
         self.scene    = pygfx.Scene()
-        self.scene.add(pygfx.Background.from_color("#000"))
 
         # post processing effects
         self.bloom = None
@@ -45,9 +44,6 @@ class Scene:
 
     def render(self):
         self.renderer.render(self.scene, self.camera)
-    
-    def clear(self):
-        self.renderer.clear(all=True)
 
     def xy_on_mesh(self, screen_coords, pickable_mesh):
         xy = self.screen_to_mesh_xy(screen_coords[0], screen_coords[1], pickable_mesh)

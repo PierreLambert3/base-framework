@@ -1,6 +1,6 @@
 from GUI.engine.frontend.graphical_elements.graphical_element import Element_2d
 from GUI.engine.frontend.graphical_elements.parallelepiped import Parallelepiped
-from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, PINK_NEON, BONE, PINK_ELECTRIC
+from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, PINK_NEON
 import pygfx
 import numpy as np
 
@@ -15,7 +15,6 @@ class Button_2d(Element_2d):
         self.text = text
         self.text_colour = text_colour
         self.font_size = font_size
-        self.hovered = False
         
         # Create borders (all 4 sides)
         self._make_button_borders()
@@ -72,35 +71,54 @@ class Button_2d(Element_2d):
 
     def on_pointer_move_inside(self, event, page_coords):
         # make brighter on hover
-        self.hovered = True
-        self.border_line.material.color = brighten(self.colour, 0.2)
-        self.text_obj.material.color    = brighten(self.colour, 0.2)
+        self.border_line.material.color = brighten(self.colour, 0.3)
+        print("position:", self.page.pos_xyz, "  self:", self.pos_xyz, "  center:", self.center, self.bl)
         super().on_pointer_move_inside(event, page_coords)
 
     def on_pointer_move_outside(self, event, page_coords):
-        self.hovered = False
-        self.reset_colours()
+        self.border_line.material.color = self.colour
         super().on_pointer_move_outside(event, page_coords)
 
     def on_pointer_down_inside(self, event, page_coords):
-        self.border_line.material.color = brighten(self.colour, 0.5)
-        self.text_obj.material.color    = brighten(self.colour, 0.8)
         super().on_pointer_down_inside(event, page_coords)
 
     def on_pointer_up_inside(self, event, page_coords):
         super().on_pointer_up_inside(event, page_coords)
 
     def stop_pointer_down_effect(self):
-        if self.hovered:
-            self.border_line.material.color = brighten(self.colour, 0.2)
-            self.text_obj.material.color    = brighten(self.colour, 0.2)
-        else:
-            self.reset_colours()
+        pass
 
-    def reset_colours(self):
-        self.border_line.material.color = self.colour
-        self.text_obj.material.color    = self.text_colour
 
-    def hide(self):
-        print("Hiding button:", self.name)
-        return super().hide()
+""" class Button_3d(Parallelepiped):
+    
+    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, text,
+                 colour=None, text_colour="white", font_size=16, edge_thickness=2.0):
+        super().__init__(unique_name, parent, bl_xyz_px, size_xyz_px, 
+                         edge_thickness=edge_thickness, colour=colour)
+        self.text = text
+        self.text_colour = text_colour
+        self.font_size = font_size
+        
+        # Create centered text on front face
+        self._make_text()
+    
+    def _make_text(self):
+        self.text_obj = pygfx.Text(
+            text=self.text,
+            font_size=self.font_size,
+            anchor="middle-center",
+            screen_space=False,
+            material=pygfx.TextMaterial(color=self.text_colour),
+        )
+        # Position text on front face (z = center_z - depth/2)
+        front_z = self.center[2] - self.size[2] / 2 + 0.1  # slightly in front
+        self.text_obj.local.position = (self.center[0], self.center[1], front_z)
+        self.register_gfx_object(self.text_obj)
+    
+    def set_text(self, new_text):
+        self.text = new_text
+        self.text_obj.set_text(new_text)
+    
+    def die(self):
+        self.scene.remove(self.text_obj)
+        super().die() """

@@ -14,14 +14,13 @@ class Custom_Frontend(Front_End):
         self.set_fps(10)
 
     def build_pages(self):
-        self.add_page("main", Page1(self.scene, "The Main Page"))
+        self.add_page(Page1(self.scene, "The Main Page", self))
 
     def build_listeners(self):
         self.add_listener("scatterplot data", self.on_scatterplot_data)
 
     def on_user_event(self, event):
         mouse_event = (event["event_type"] == "pointer_move" or event["event_type"] == "pointer_down" or event["event_type"] == "pointer_up")
-        
         if mouse_event:
             # 1. update pointer position in shared dict (raw screen coords)
             screen_mouse_coords = (event["x"], event["y"])
@@ -56,15 +55,15 @@ class Custom_Frontend(Front_End):
 
         # --- 3. logic ---
         if TESTING_PERFORMANCE:
-            scatterplot = self.pages['main'].get("My Scatterplot")
+            scatterplot = self.pages['The Main Page'].get("My Scatterplot")
             scatterplot.receive_data(np.random.rand(scatterplot.n, 3).astype(np.float32) * 2 - 1)
         else:
             self.process_messages()    # from Queue (careful not to saturate the queue)
             self.process_shared_dict() # from shared dict
         # rotate elements for demo purposes
-        parallelepiped = self.pages['main'].get("My Parallelepiped")
+        parallelepiped = self.pages['The Main Page'].get("My Parallelepiped")
         parallelepiped.rotate((0.15, 0.05, 0.05))  # degrees per frame
-        inner_container = self.pages['main'].get("Inner Container")
+        inner_container = self.pages['The Main Page'].get("Inner Container")
         inner_container.rotate((0.01, 0.05, 0.0))
         # change bloom tint over time, just for the demo
         if self.scene.bloom is not None:
@@ -81,6 +80,10 @@ class Custom_Frontend(Front_End):
 
     def routine(self):
         # 1. initialisation
+        # self.initialise_scene()
+        # self.build_pages()
+        # self.build_listeners()
+        # self.register_user_event_listener(self.on_user_event)
         try:
             self.initialise_scene()
             self.build_pages()
@@ -114,5 +117,5 @@ class Custom_Frontend(Front_End):
         print(f"Frontend received backend ping with data: {data}")
 
     def on_scatterplot_data(self, data):
-        scatterplot = self.pages['main'].get("My Scatterplot")
+        scatterplot = self.pages['The Main Page'].get("My Scatterplot")
         scatterplot.receive_data(data)

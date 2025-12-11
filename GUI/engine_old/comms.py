@@ -43,8 +43,8 @@ class _Listeners:
 
 """ Wraps a inter-process Queue """
 class _Receiver:
-    def __init__(self, queue_rcv, listeners):
-        self._queue = queue_rcv
+    def __init__(self, queue_from_backend, listeners):
+        self._queue = queue_from_backend
         self.listeners = listeners
     
     def process(self, sender):
@@ -62,26 +62,24 @@ class _Receiver:
                 sender.send(event_name + " ack", event_name)
             ack_received = ack_received or is_ack_event
         return ack_received
-    
-    def send_to_self(self, event_name, event_data=None):
-        self._queue.put((event_name, event_data))
+
 
 """ Wraps a inter-process Queue """
 class _Sender:
-    def __init__(self, queue_out):
-        self._queue = queue_out
+    def __init__(self, queue_to_backend):
+        self._queue = queue_to_backend
         self._send_timers = {} # event_name -> last send time (for throttling)
     
     def send(self, event_name, event_data=None):
         self._queue.put((event_name, event_data))
 
 class Communications:
-    def __init__(self, queue_rcv, queue_out, shared_dict, listeners):
+    def __init__(self, queue_from_backend, queue_to_backend, shared_dict, listeners):
 
         # - queues: event based communication
         self.listeners = listeners
-        self.receiver  = _Receiver(queue_rcv, self.listeners)
-        self.sender    = _Sender(queue_out)
+        self.receiver  = _Receiver(queue_from_backend, self.listeners)
+        self.sender    = _Sender(queue_to_backend)
         self.outgoing_messages_ready = {} # [event_name] = ready to send   (waits for ack of previous message)
         self.pending_outgoing        = {} # if not acked yet: put here the data to send later
 

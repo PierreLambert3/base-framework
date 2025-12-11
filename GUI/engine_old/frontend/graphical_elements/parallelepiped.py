@@ -9,7 +9,7 @@ class Parallelepiped(Element_3d):
     A 3D parallelepiped (box) element with visible edges.
     The 12 edges of the box are drawn as lines.
     """
-    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, edge_color=None, edge_thickness=1.0, colour=None):
+    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, edge_color=None, edge_thickness=2.0, colour=None):
         super().__init__(unique_name, parent, bl_xyz_px, size_xyz_px, colour=colour)
 
         self.edge_color = edge_color if edge_color is not None else interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5)

@@ -3,12 +3,10 @@ import pygfx
 import numpy as np
 
 class Page(_GraphicalElement):
-    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None):
-        self.frontend       = frontend
-        self._scene         = scene.scene
-        self._scene_wrapper = scene
+    def __init__(self, scene, unique_name, bl_xyz_px, size_xyz_px):
+        self._scene = scene.scene
         center_xyz = bl_xyz_px[0] + size_xyz_px[0]/2, bl_xyz_px[1] + size_xyz_px[1]/2, bl_xyz_px[2] + size_xyz_px[2]/2
-        super().__init__(unique_name, None, center_xyz, size_xyz_px, colour=colour)
+        super().__init__(unique_name, None, center_xyz, size_xyz_px)
         self.is_leaf          = False
         self.containers       = []
         self._containers_dict = {}
@@ -100,7 +98,7 @@ class Page(_GraphicalElement):
         ], dtype=np.float32)
         
         geom = pygfx.Geometry(positions=positions)
-        mat  = pygfx.LineMaterial(color=self.colour, thickness=1.0, aa=True)
+        mat  = pygfx.LineMaterial(color=interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5), thickness=2.0, aa=True)
         self.border_line = pygfx.Line(geom, mat)
         return self.border_line
     
@@ -113,23 +111,3 @@ class Page(_GraphicalElement):
         for child in self.containers:
             child.show()
         super().show()
-    
-    def destroy(self):
-        # Destroy all containers (which recursively destroy their children)
-        for container in self.containers:
-            container.die()
-        self.containers.clear()
-        self._containers_dict.clear()
-        
-        # Clear interactive element lists
-        self.clickable_elements.clear()
-        self.hoverable_elements.clear()
-        self.awaiting_mouse_up.clear()
-        self.awaiting_hover_out.clear()
-        
-        # Destroy the page's own gfx objects (border, pick_mesh)
-        self.die()
-        
-        # Clear references
-        self._scene = None
-        self._scene_wrapper = None

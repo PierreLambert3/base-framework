@@ -49,28 +49,10 @@ class _GraphicalElement:
         return self._scene
     
     @property
-    def scene_wrapper(self):
-        if not self.is_page:
-            return self.parent.scene_wrapper
-        return self._scene_wrapper
-    
-    @property
     def page(self):
         if self.is_page:
             return self
         return self.parent.page
-    
-    def move_to(self, new_center_xyz_px):
-        self.pos_xyz = new_center_xyz_px
-        self.pagewise_xy = self._make_page_coordinates()
-        for gfx_obj in self._gfx_objects:
-            gfx_obj.local.position = self.center
-    
-    def translate(self, delta_xyz_px):
-        new_center = (self.pos_xyz[0] + delta_xyz_px[0],
-                      self.pos_xyz[1] + delta_xyz_px[1],
-                      self.pos_xyz[2] + delta_xyz_px[2])
-        self.move_to(new_center)
     
     def register_gfx_object(self, gfx_obj):
         self.scene.add(gfx_obj)
@@ -127,27 +109,8 @@ class _GraphicalElement:
         return (bl_x <= x <= tr_x) and (bl_y <= y <= tr_y)
 
     def die(self):
-        """
-        Destroy this element and remove all its pygfx objects from the scene.
-        This properly deallocates GPU resources by removing objects from the scene graph.
-        """
-        # Remove all pygfx objects from the scene
-        for gfx_obj in self._gfx_objects:
-            if gfx_obj.parent is not None:
-                gfx_obj.parent.remove(gfx_obj)
+        print("Deleting element:", self.name)
         self._gfx_objects.clear()
-        
-        # Unregister from page's interactive element lists
-        page = self.page
-        if page is not None:
-            if self in page.hoverable_elements:
-                page.hoverable_elements.remove(self)
-            if self in page.clickable_elements:
-                page.clickable_elements.remove(self)
-            if self in page.awaiting_mouse_up:
-                page.awaiting_mouse_up.remove(self)
-            if self in page.awaiting_hover_out:
-                page.awaiting_hover_out.remove(self)
 
     def register_hoverable(self):
         self.page.hoverable_elements.append(self)
@@ -270,9 +233,8 @@ class Container(Element_2d):
         return None
 
     def die(self):
-        """Destroy this container and all its children recursively."""
         for child in self.children:
-            child.die()
+            child.die() # well, that turned out darker than I thought
         self.children.clear()
         self.children_dict.clear()
         super().die()

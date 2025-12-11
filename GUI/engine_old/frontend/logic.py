@@ -12,7 +12,6 @@ class Front_End:
     def __init__(self, multiprocessing_context, queue_from_backend, queue_to_backend, shared_dict, window_name="GUI Frontend Window"):
         self.multiprocessing_context = multiprocessing_context
         self.window_name = window_name
-        self.mouse_coords = (0, 0)
 
         # 1. rendering
         self.scene               = None
@@ -79,8 +78,7 @@ class Front_End:
         self.scene.canvas.close()
         self.comms.send("exit program", None)
 
-    def add_page(self, page_object):
-        page_name = page_object.name
+    def add_page(self, page_name, page_object):
         assert page_name not in self.pages, f"Page with name '{page_name}' already exists."
         self.pages[page_name] = page_object
         if self.current_page is None:
