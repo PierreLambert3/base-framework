@@ -26,12 +26,12 @@ class Page(_GraphicalElement):
         self.awaiting_hover_out  = []
     
     def manage_mouse_pointer_move(self, event, page_coords):
-        
         # elements hit by the pointer
         for element in self.hoverable_elements:
-            if element.hit_by_page_coords(page_coords[0], page_coords[1]):
+            if not element.hidden and element.hit_by_page_coords(page_coords[0], page_coords[1]):
                 element.on_pointer_move_inside(event, page_coords)
-                self.awaiting_hover_out.append(element)
+                if element not in self.awaiting_hover_out:
+                    self.awaiting_hover_out.append(element)
         # elements no longer hit by the pointer
         for i in range(len(self.awaiting_hover_out)-1, -1, -1):
             element = self.awaiting_hover_out[i]
@@ -41,13 +41,13 @@ class Page(_GraphicalElement):
     
     def manage_mouse_pointer_down(self, event, page_coords):
         for element in self.clickable_elements:
-            if element.hit_by_page_coords(page_coords[0], page_coords[1]):
+            if not element.hidden and element.hit_by_page_coords(page_coords[0], page_coords[1]):
                 element.on_pointer_down_inside(event, page_coords)
                 self.awaiting_mouse_up.append(element)
     
     def manage_mouse_pointer_up(self, event, page_coords):
         for element in self.awaiting_mouse_up:
-            if element.hit_by_page_coords(page_coords[0], page_coords[1]):
+            if not element.hidden and element.hit_by_page_coords(page_coords[0], page_coords[1]):
                 element.on_pointer_up_inside(event, page_coords)
             element.stop_pointer_down_effect()
         self.awaiting_mouse_up.clear()
@@ -108,6 +108,8 @@ class Page(_GraphicalElement):
         for child in self.containers:
             child.hide()
         super().hide()
+        if self.frontend.current_page == self:
+            self.frontend.current_page = None
     
     def show(self):
         for child in self.containers:
@@ -133,3 +135,8 @@ class Page(_GraphicalElement):
         # Clear references
         self._scene = None
         self._scene_wrapper = None
+
+        # set frontend "current_page" to None if this page was the current page, and remove from frontend pages dict
+        if self.frontend.current_page == self:
+            self.frontend.current_page = None
+        del self.frontend.pages[self.name]
