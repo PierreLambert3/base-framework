@@ -78,14 +78,14 @@ class _Sender:
 class Communications:
     def __init__(self, queue_rcv, queue_out, shared_dict, listeners):
 
-        # - queues: event based communication
+        # - queues: event based communication, with automatic ack handling
         self.listeners = listeners
         self.receiver  = _Receiver(queue_rcv, self.listeners)
         self.sender    = _Sender(queue_out)
         self.outgoing_messages_ready = {} # [event_name] = ready to send   (waits for ack of previous message)
         self.pending_outgoing        = {} # if not acked yet: put here the data to send later
 
-        # - for continuous data sharing, not event based
+        # - for continuous data sharing (not event based): shared dictionary
         self.shared    = _Shared_dict(shared_dict) 
 
     def _register_outgoing_message(self, event_name):

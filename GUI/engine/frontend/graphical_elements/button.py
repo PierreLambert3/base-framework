@@ -1,6 +1,6 @@
 from GUI.engine.frontend.graphical_elements.graphical_element import Element_2d
 from GUI.engine.frontend.graphical_elements.parallelepiped import Parallelepiped
-from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, PINK_NEON, BONE, PINK_ELECTRIC
+from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, PINK_NEON, BONE, PINK_ELECTRIC, ORANGE_RED
 import pygfx
 import numpy as np
 
@@ -88,8 +88,6 @@ class Button_2d(Element_2d):
         self.hovered = False
         if not self.toggleable or (self.toggleable and not self.pressed):
             self.reset_colours()
-            print("colours reset for:", self.name, "  toggble:", self.toggleable, " (self.toggleable and not self.pressed):", (self.toggleable and not self.pressed), " pressed:", self.pressed)
-
         super().on_pointer_move_outside(event, page_coords)
 
     def on_pointer_down_inside(self, event, page_coords):
@@ -138,5 +136,5 @@ class Button_2d(Element_2d):
         self.text_obj.material.color    = brighten(self.colour, 0.8)
     
     def _apply_toggledSelected_style(self):
-        self.border_line.material.color = brighten(self.colour, 0.2)
-        # self.text_obj.material.color    = BONE
+        self.border_line.material.color = brighten(self.colour, 0.29)
+        self.text_obj.material.color    = interpolate_color(self.colour, BONE, 0.2)

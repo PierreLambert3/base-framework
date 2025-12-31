@@ -14,7 +14,7 @@ class Scatterplot2D(Element_2d):
         self.next_positions    = np.empty_like(self.current_positions)
         self.rng = np.random.Generator(np.random.PCG64())
         self.current_positions[:] = self.rng.uniform(-1.0, 1.0, size=self.current_positions.shape).astype(np.float32)
-        # Explicit Buffer + send_data pattern (more explicit GPU upload control)
+        # on GPU
         self.positions_buffer = pygfx.Buffer(
             nitems=self.n,
             nbytes=self.n * 3 * 4,
@@ -48,6 +48,6 @@ class Scatterplot2D(Element_2d):
         self.next_positions[:n_new, 1] = normalized[:, 1] * sz[1] + bl[1]
         self.next_positions[:n_new, 2] = bl[2]
         self.current_positions, self.next_positions = self.next_positions, self.current_positions
-        self.positions_buffer.send_data(0, self.current_positions)
+        self.positions_buffer.send_data(0, self.current_positions) # send to GPU
         
        

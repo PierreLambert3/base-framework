@@ -24,6 +24,7 @@ class Scene:
                 threshold=0.4,
                 knee=0.2,
                 strength=20.0,
+                # strength=2.0,
                 color_select=True,
                 color_center=BLOOM_TINT,  # Blue tint
                 color_sigma=0.95,  # Now acts as tint strength (0-1), 0.8 = strong tint
@@ -36,7 +37,7 @@ class Scene:
 
         # Camera (simple perspective)
         self.camera = pygfx.PerspectiveCamera(50, aspect = window_size[0] / window_size[1])
-        self.camera.local.position = (window_size[0] / 2, window_size[1] / 2, 1000)
+        self.camera.local.position = (window_size[0] / 2, window_size[1] / 2, 2000)
         self.camera.look_at((window_size[0] / 2, window_size[1] / 2, 0))
         self.scene.add(self.camera)
 
@@ -51,8 +52,57 @@ class Scene:
 
     def xy_on_mesh(self, screen_coords, pickable_mesh):
         xy = self.screen_to_mesh_xy(screen_coords[0], screen_coords[1], pickable_mesh)
-        is_hit = (0.0 <= xy[0] <= pickable_mesh.local.scale[0]) and (0.0 <= xy[1] <= pickable_mesh.local.scale[1]) if xy is not None else False
+        # Use abs(scale) because meshes may be scaled negatively depending on orientation.
+        w = abs(pickable_mesh.local.scale[0])
+        h = abs(pickable_mesh.local.scale[1])
+        is_hit = (0.0 <= xy[0] <= w) and (0.0 <= xy[1] <= h) if xy is not None else False
         return xy if is_hit else None
+
+    def _hit_on_mesh_plane(self, x_px, y_px, mesh: pygfx.Mesh):
+        """Intersect the screen ray with the (infinite) plane of `mesh`.
+
+        Returns (hit_world_xyz, hit_local_xyz, t) or (None, None, None) if no valid hit.
+        - hit_world_xyz: world-space intersection point
+        - hit_local_xyz: same point in mesh local space
+        - t: ray parameter where hit_world = origin + t * direction
+        """
+        origin, direction = self._compute_world_ray(x_px, y_px)
+        if origin is None:
+            return None, None, None
+
+        # Plane basis from mesh transform: origin O, local unit axes U and V
+        pO = la.vec_transform((0.0, 0.0, 0.0), mesh.world.matrix)
+        pU = la.vec_transform((1.0, 0.0, 0.0), mesh.world.matrix)
+        pV = la.vec_transform((0.0, 1.0, 0.0), mesh.world.matrix)
+        n = np.cross(pU - pO, pV - pO)
+        n_norm = np.linalg.norm(n)
+        if n_norm < 1e-12:
+            return None, None, None
+        n /= n_norm
+
+        denom = float(np.dot(n, direction))
+        if abs(denom) < 1e-12:
+            return None, None, None
+
+        t = float(np.dot(n, (pO - origin)) / denom)
+        if t < 0:
+            return None, None, None
+
+        hit_world = origin + t * direction
+        hit_local = la.vec_transform(hit_world, mesh.world.inverse_matrix)
+        return hit_world, hit_local, t
+
+    @staticmethod
+    def _mesh_local_to_page_xy(hit_local, width_px: float, height_px: float):
+        """Convert a mesh-local hit position to page pixel coordinates.
+
+        Assumes a center-anchored plane with local x,y in [-0.5..0.5], and returns
+        top-left anchored coordinates (x right, y down).
+        """
+        x_px_out = (hit_local[0] + 0.5) * width_px
+        y_px_out = (0.5 - hit_local[1]) * height_px
+        y_flip = height_px - y_px_out
+        return float(x_px_out), float(y_flip)
 
     def _compute_world_ray(self, x_px, y_px):
         """Compute a world-space ray (origin, direction) from screen pixel coordinates.
@@ -92,39 +142,26 @@ class Scene:
         Map screen pixel coordinates to the local XY of a rectangular page mesh.
         Returns (page_x_px, page_y_px) or None if no valid intersection.
         """
-        origin, direction = self._compute_world_ray(x_px, y_px)
-        if origin is None:
+        _, hit_local, _ = self._hit_on_mesh_plane(x_px, y_px, mesh)
+        if hit_local is None:
             return None
 
-        # Define plane from mesh transform: origin O, local unit axes U and V
-        pO = la.vec_transform((0.0, 0.0, 0.0), mesh.world.matrix)
-        pU = la.vec_transform((1.0, 0.0, 0.0), mesh.world.matrix)
-        pV = la.vec_transform((0.0, 1.0, 0.0), mesh.world.matrix)
-        n  = np.cross(pU - pO, pV - pO)
-        n_norm = np.linalg.norm(n)
-        if n_norm < 1e-12:
-            return None
-        n /= n_norm
-
-        denom = float(np.dot(n, direction))
-        if abs(denom) < 1e-12:
-            return None
-        t = float(np.dot(n, (pO - origin)) / denom)
-        if t < 0:
-            return None
-        hit_world = origin + t * direction
-
-        # Transform hit to mesh local space
-        hit_local = la.vec_transform(hit_world, mesh.world.inverse_matrix)
-
-        width_px  = abs(mesh.local.scale[0])
+        width_px = abs(mesh.local.scale[0])
         height_px = abs(mesh.local.scale[1])
+        return self._mesh_local_to_page_xy(hit_local, width_px, height_px)
+    
+    def world_hit_on_mesh(self, screen_coords, pickable_mesh):
+        """Get the world-space intersection point on a mesh from screen coordinates.
+        Returns (hit_world_xyz, distance_to_hit) or (None, None) if no intersection."""
+        hit_world, hit_local, t = self._hit_on_mesh_plane(screen_coords[0], screen_coords[1], pickable_mesh)
+        if hit_world is None:
+            return None, None
 
-        # Center-anchored plane: local x,y in [-0.5..0.5]
-        x_px_out = (hit_local[0] + 0.5) * width_px
-        y_px_out = (0.5 - hit_local[1]) * height_px
+        # Check if hit is within mesh bounds (same convention as screen_to_mesh_xy)
+        width_px = abs(pickable_mesh.local.scale[0])
+        height_px = abs(pickable_mesh.local.scale[1])
+        x_px_out, y_flip = self._mesh_local_to_page_xy(hit_local, width_px, height_px)
+        if not ((0.0 <= x_px_out <= width_px) and (0.0 <= y_flip <= height_px)):
+            return None, None
 
-        # flip y to achor top-left to bottom-left
-        y_flip = height_px - y_px_out
-
-        return float(x_px_out), float(y_flip)
+        return hit_world, t

@@ -3,7 +3,7 @@ import pygfx
 import numpy as np
 
 class Page(_GraphicalElement):
-    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None):
+    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None, no_border=False):
         self.frontend       = frontend
         self._scene         = scene.scene
         self._scene_wrapper = scene
@@ -14,7 +14,8 @@ class Page(_GraphicalElement):
         self._containers_dict = {}
 
         # border
-        self.register_gfx_object(self._generate_border())
+        if not no_border:
+            self.register_gfx_object(self._generate_border())
 
         # Interaction mesh (to translate pointer coordinates to page coordinates)
         self.register_gfx_object(self._generate_pickable_mesh())

@@ -5,7 +5,7 @@ from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_co
 
 
 class _GraphicalElement:
-    def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None):
+    def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None, background_colour=None, background_opacity=1.0):
         self.name         = unique_name
         self.parent       = parent
         self.pos_xyz      = center_xyz_px
@@ -15,10 +15,21 @@ class _GraphicalElement:
         self._rotation    = (0, 0, 0, 1)  # quaternion (x, y, z, w) - identity rotation
         self._gfx_objects = []  # list of pygfx objects that need rotation applied
         self.pagewise_xy  = self._make_page_coordinates()
+        self.hidden       = False
+
+        self._background_colour = background_colour
+        self._background_opacity = background_opacity
+        self._background_mesh = None
+        if background_colour is not None:
+            self._create_background_mesh()
 
         self._callback_on_pointer_move_inside    = None
         self._callback_on_pointer_move_outside   = None
         self._callback_pointer_click             = None
+
+        # # if parent is a container, register self as its child
+        # if isinstance(self.parent, Container):
+        #     self.parent.add(self)
 
     @property
     def size(self):
@@ -28,11 +39,12 @@ class _GraphicalElement:
     @property
     def center(self):
         return self.pos_xyz
-    
+    pos = center
+
     @property
     def rotation(self):
         return self._rotation
-    
+
     @property
     def bottom_left(self):
         return (self.center[0] - self.size[0]/2, self.center[1] - self.size[1]/2, self.center[2] - self.size[2]/2)
@@ -53,7 +65,7 @@ class _GraphicalElement:
         if not self.is_page:
             return self.parent.scene_wrapper
         return self._scene_wrapper
-    
+
     @property
     def page(self):
         if self.is_page:
@@ -63,8 +75,12 @@ class _GraphicalElement:
     def move_to(self, new_center_xyz_px):
         self.pos_xyz = new_center_xyz_px
         self.pagewise_xy = self._make_page_coordinates()
-        for gfx_obj in self._gfx_objects:
-            gfx_obj.local.position = self.center
+        for i, gfx_obj in enumerate(self._gfx_objects):
+            # If background mesh, push slightly back in z
+            if gfx_obj is self._background_mesh:
+                gfx_obj.local.position = (self.center[0], self.center[1], self.center[2] - 0.01)
+            else:
+                gfx_obj.local.position = self.center
     
     def translate(self, delta_xyz_px):
         new_center = (self.pos_xyz[0] + delta_xyz_px[0],
@@ -76,13 +92,21 @@ class _GraphicalElement:
         self.scene.add(gfx_obj)
         self._gfx_objects.append(gfx_obj)
 
+    def unregister_gfx_object(self, gfx_obj):
+        self.scene.remove(gfx_obj)
+        self._gfx_objects.remove(gfx_obj)
+
     def hide(self):
-        for gfx_obj in self._gfx_objects:
-            gfx_obj.visible = False
+        if not self.hidden:
+            self.hidden = True
+            for gfx_obj in self._gfx_objects:
+                gfx_obj.visible = False
     
     def show(self):
-        for gfx_obj in self._gfx_objects:
-            gfx_obj.visible = True
+        if self.hidden:
+            self.hidden = False
+            for gfx_obj in self._gfx_objects:
+                gfx_obj.visible = True
     
     @property
     def visible(self):
@@ -119,6 +143,21 @@ class _GraphicalElement:
         page_x = (self.bl[0] - page_bl[0]) if self.parent is not None else self.bl[0]
         page_y = (self.bl[1] - page_bl[1]) if self.parent is not None else self.bl[1]
         return (page_x, page_y)
+
+    def _create_background_mesh(self):
+        import pygfx
+        # Use a plane geometry sized to the element, centered at self.center
+        w, h = self.size_xyz[0], self.size_xyz[1]
+        geom = pygfx.geometries.plane_geometry(width=w, height=h)
+        mat = pygfx.MeshBasicMaterial(color=self._background_colour, opacity=self._background_opacity)
+        mesh = pygfx.Mesh(geom, mat)
+        mesh.local.position = self.center
+        # Optionally, push slightly back in z to avoid z-fighting with borders/text
+        mesh.local.position = (self.center[0], self.center[1], self.center[2] - 0.01)
+        self._background_mesh = mesh
+        # Insert as first object so it's drawn behind everything else
+        self._gfx_objects.insert(0, mesh)
+        self.scene.add(mesh)
     
     def hit_by_page_coords(self, x, y): # in pixels in the page coordinate system
         bl_x, bl_y = self.pagewise_xy
@@ -150,18 +189,29 @@ class _GraphicalElement:
                 page.awaiting_hover_out.remove(self)
 
     def register_hoverable(self):
-        self.page.hoverable_elements.append(self)
+        if self not in self.page.hoverable_elements:
+            self.page.hoverable_elements.append(self)
 
     def register_clickable(self):
-        self.page.clickable_elements.append(self)
+        if self not in self.page.clickable_elements:
+            self.page.clickable_elements.append(self)
 
     def add_pointer_move_inside_callback(self, callback):
+        # if not registered as hoverable yet, do it now
+        if self not in self.page.hoverable_elements:
+            self.register_hoverable()
         self._callback_on_pointer_move_inside = callback
     
     def add_pointer_move_outside_callback(self, callback):
+        # if not registered as hoverable yet, do it now
+        if self not in self.page.hoverable_elements:
+            self.register_hoverable()
         self._callback_on_pointer_move_outside = callback
 
     def add_pointer_click_callback(self, callback):
+        # if not registered as clickable yet, do it now
+        if self not in self.page.clickable_elements:
+            self.register_clickable()
         self._callback_pointer_click = callback
 
     def on_pointer_move_inside(self, event, page_coords):
@@ -194,12 +244,12 @@ class _GraphicalElement:
         ...
 
 class Element_2d(_GraphicalElement):
-    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, colour=None): # pos_xy_rel: bottom-left corner
+    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, colour=None, background_colour=None): # pos_xy_rel: bottom-left corner
         size_xyz_px  = (size_xy_rel[0]*parent.size[0], size_xy_rel[1]*parent.size[1], 0)
         center_px    = (parent.bl[0] + bl_xy_rel[0]*parent.size[0] + size_xyz_px[0]/2, parent.bl[1] + bl_xy_rel[1]*parent.size[1] + size_xyz_px[1]/2, parent.bl[2])
-        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour)
+        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour, background_colour=background_colour)
 
-    def _make_borders(self, borders, thickness=2.0):
+    def _make_borders(self, borders, thickness=1.0):
         if sum(borders) == 0:
             return  # no borders to create
         
@@ -244,9 +294,9 @@ class Element_3d(_GraphicalElement):
         super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour)
 
 class Container(Element_2d):
-    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, borders = (0, 0, 0, 0), colour=None):
+    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, borders = (0, 0, 0, 0), colour=None, background_colour=None):
         # borders: (top, right, bottom, left) "0" means no border, "1" means full border
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour)
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, background_colour=background_colour)
         self.is_leaf  = False
         self.children = []
         self.children_dict = {}
@@ -255,8 +305,14 @@ class Container(Element_2d):
     
     def add(self, child_element):
         child_element.parent = self
+        for child in self.children:
+            if child.name == child_element.name:
+                print("WARNING: attempting to add child with duplicate name to container:", self.name, "  child name:", child_element.name)
+                return
         self.children.append(child_element)
         self.children_dict[child_element.name] = child_element
+        if self.hidden:
+            child_element.hide()
     
     def get(self, child_name):
         if child_name in self.children_dict:
@@ -286,3 +342,11 @@ class Container(Element_2d):
         for child in self.children:
             child.show()
         super().show()
+
+    def move_to(self, new_center_xyz_px):
+        super().move_to(new_center_xyz_px)
+
+    def translate(self, delta_xyz_px):
+        for child in self.children:
+            child.translate(delta_xyz_px)
+        super().translate(delta_xyz_px)

@@ -1,5 +1,5 @@
 POSTPROCESSING_BLOOM = 1
-BLOOM_TINT           = (1.0, 0.01, 0.0) # amber
+BLOOM_TINT           = (1.0, 0.0, -0.1) # amber
 # BLOOM_TINT           = (-0.1, -0.99,  0.83) # ultraviolet
 # BLOOM_TINT           = (-0.1, -0.6, -0.2) # wierd
 # BLOOM_TINT           = (-0.1, -0.8, 0.1) # pink neon
@@ -7,6 +7,8 @@ BLOOM_TINT           = (1.0, 0.01, 0.0) # amber
 
 POSTPROCESSING_NOISE = 0
 
+AMBER            = "#FF7300"
+AMBER2           = "#FA5908"
 ORANGE_YELLOW    = "#FFA500"
 ORANGE_WHITE     = "#FADE9B"
 ORANGE_RED       = "#FF4500"

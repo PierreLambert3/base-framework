@@ -8,7 +8,6 @@ class Back_End:
         self.multiprocessing_context = multiprocessing_context
         self.listeners = _Listeners()
         self.comms     = Communications(queue_from_frontend, queue_to_frontend, shared_dict, self.listeners)
-        self.add_listener("exit program", self.exit_program)
         self.running   = True
 
     def routine(self):
