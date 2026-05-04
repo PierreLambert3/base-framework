@@ -23,8 +23,15 @@ class Page(_GraphicalElement):
         # clickable or hoverable elements
         self.clickable_elements  = []  # mouse click : elements needs to define on_pointer_down_inside and on_pointer_up_inside
         self.hoverable_elements  = []  # mouse move  : elements needs to define on_pointer_move_inside and on_pointer_move_outside
+        self.scrollable_elements = []  # mouse wheel : elements needs to define on_wheel
         self.awaiting_mouse_up   = []
         self.awaiting_hover_out  = []
+
+        # user-defined callback when page is shown (for instance to hide some elements, or for animations)
+        self.on_show             = None
+        
+        # Overlay particles (set by subclass if needed)
+        self.overlay_particles   = None
     
     def manage_mouse_pointer_move(self, event, page_coords):
         # elements hit by the pointer
@@ -53,6 +60,14 @@ class Page(_GraphicalElement):
             element.stop_pointer_down_effect()
         self.awaiting_mouse_up.clear()
 
+    def manage_mouse_wheel(self, event, page_coords):
+        """Dispatch wheel events to scrollable elements under the cursor."""
+        for element in self.scrollable_elements:
+            if not element.hidden and element.hit_by_page_coords(page_coords[0], page_coords[1]):
+                element.on_wheel(event, page_coords)
+                return True  # consumed by element
+        return False  # not consumed, let page/camera handle it
+
     def add_container(self, container):
         assert container.name not in self._containers_dict, f"Container with name '{container.name}' already exists in page '{self.name}'"
         self.containers.append(container)
@@ -77,7 +92,8 @@ class Page(_GraphicalElement):
 
     def _generate_pickable_mesh(self):
         geom = pygfx.geometries.plane_geometry(width=1.0, height=1.0)
-        mat  = pygfx.MeshBasicMaterial(color="#000", opacity=0.0, pick_write=True)  # invisible but pickable
+        # mat  = pygfx.MeshBasicMaterial(color="#000", opacity=0.0, pick_write=True)  # invisible but pickable
+        mat  = pygfx.MeshBasicMaterial(color="#000", opacity=0.0, pick_write=True, depth_write=False)  # invisible but pickable
         pick_mesh = pygfx.Mesh(geom, mat)
         pick_mesh.local.scale    = (self.size[0], self.size[1], 0.001)
         pick_mesh.local.position = (self.center[0], self.center[1], self.center[2]-0.5)
@@ -111,12 +127,31 @@ class Page(_GraphicalElement):
         super().hide()
         if self.frontend.current_page == self:
             self.frontend.current_page = None
-    
+        self.on_hide()
+
     def show(self):
         for child in self.containers:
             child.show()
         super().show()
+        if self.on_show is not None:
+            self.on_show(self)
+
+    def on_show(self):
+        pass
     
+    def on_hide(self):
+        pass
+
+    def one_frame(self, mouse_coords=(0, 0)):
+        """Per-frame update. Override in subclasses, call super().one_frame()."""
+        if self.overlay_particles is not None and self.overlay_particles.is_idle == False:
+            # Convert screen coords to scene coords for particles
+            cursor_scene_xy = None
+            page_coords = self.scene_wrapper.xy_on_mesh(mouse_coords, self.pick_mesh)
+            if page_coords is not None:
+                cursor_scene_xy = (self.bl[0] + page_coords[0], self.bl[1] + page_coords[1])
+            self.overlay_particles.tick(cursor_scene_xy)
+
     def destroy(self):
         # Destroy all containers (which recursively destroy their children)
         for container in self.containers:
@@ -127,6 +162,7 @@ class Page(_GraphicalElement):
         # Clear interactive element lists
         self.clickable_elements.clear()
         self.hoverable_elements.clear()
+        self.scrollable_elements.clear()
         self.awaiting_mouse_up.clear()
         self.awaiting_hover_out.clear()
         

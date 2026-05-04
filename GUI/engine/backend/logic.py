@@ -4,8 +4,9 @@ from GUI.engine.comms import _Listeners, Communications
 DEAD_AFTER_S = 5.0
 
 class Back_End:
-    def __init__(self, multiprocessing_context, queue_from_frontend, queue_to_frontend, shared_dict):
+    def __init__(self, multiprocessing_context, manager, queue_from_frontend, queue_to_frontend, shared_dict):
         self.multiprocessing_context = multiprocessing_context
+        self.manager   = manager  # for creating queues that can be sent between processes
         self.listeners = _Listeners()
         self.comms     = Communications(queue_from_frontend, queue_to_frontend, shared_dict, self.listeners)
         self.running   = True
@@ -18,7 +19,8 @@ class Back_End:
 
     def exit_program(self, data):
         self.running = False
-        self.comms.send("exit program", None)
+        self.comms.send("exit program", None, needs_ack=False)
+        self.comms.cancel_join_threads()
 
     def send(self, event_name, event_data=None, min_interval_s=0.0):
         self.comms.send(event_name, event_data)
@@ -37,3 +39,14 @@ class Back_End:
 
     def read_shared_dict(self, key, default=None):
         return self.comms.shared.get(key, default=default)
+    
+    def _drain_data_stream_queues(self, queues=None, comms=None):
+        if queues is not None:
+            for queue in queues:
+                while not queue.empty():
+                    try:
+                        _ = queue.get_nowait()
+                    except:
+                        break
+        if comms is not None:
+            comms.empty_queues()

@@ -77,7 +77,8 @@ class Front_End:
     def exit_program(self, data):
         loop.stop()
         self.scene.canvas.close()
-        self.comms.send("exit program", None)
+        self.comms.send("exit program", None, needs_ack=False)
+        self.comms.cancel_join_threads()
 
     def add_page(self, page_object):
         page_name = page_object.name

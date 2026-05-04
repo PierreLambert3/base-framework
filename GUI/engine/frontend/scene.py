@@ -45,6 +45,10 @@ class Scene:
         self.canvas.request_draw(one_frame_method)
 
     def render(self):
+        # Guard against invalid canvas size (e.g., window minimized on Windows)
+        w, h = self.renderer.logical_size
+        if w <= 0 or h <= 0:
+            return
         self.renderer.render(self.scene, self.camera)
     
     def clear(self):

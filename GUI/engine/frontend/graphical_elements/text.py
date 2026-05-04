@@ -28,8 +28,10 @@ class Text(Element_2d):
         )
         self.text_obj.local.position = self.center
         self.register_gfx_object(self.text_obj)
+        if self.parent.hidden:
+            self.hide()
     
     def set_text(self, new_text):
-        self.unregister_gfx_object(self.text_obj)
-        self.text = new_text
-        self._make_text()
+        if new_text != self.text:
+            self.text = new_text
+            self.text_obj.set_text(new_text)

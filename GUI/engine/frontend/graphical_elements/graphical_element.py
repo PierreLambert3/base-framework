@@ -3,7 +3,6 @@ import numpy as np
 from pylinalg import quat_from_axis_angle, quat_from_euler, quat_mul
 from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color
 
-
 class _GraphicalElement:
     def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None, background_colour=None, background_opacity=1.0):
         self.name         = unique_name
@@ -27,9 +26,12 @@ class _GraphicalElement:
         self._callback_on_pointer_move_outside   = None
         self._callback_pointer_click             = None
 
-        # # if parent is a container, register self as its child
-        # if isinstance(self.parent, Container):
-        #     self.parent.add(self)
+        # Particle magnet feature
+        self.is_particle_magnet = False
+
+        # If parent is a container, register self as its child
+        if self.parent is not None and hasattr(self.parent, 'is_container'):
+            self.parent.add(self)
 
     @property
     def size(self):
@@ -91,6 +93,8 @@ class _GraphicalElement:
     def register_gfx_object(self, gfx_obj):
         self.scene.add(gfx_obj)
         self._gfx_objects.append(gfx_obj)
+        if self.hidden:
+            gfx_obj.visible = False
 
     def unregister_gfx_object(self, gfx_obj):
         self.scene.remove(gfx_obj)
@@ -108,10 +112,6 @@ class _GraphicalElement:
             for gfx_obj in self._gfx_objects:
                 gfx_obj.visible = True
     
-    @property
-    def visible(self):
-        return all(gfx_obj.visible for gfx_obj in self._gfx_objects) if self._gfx_objects else True
-
     def rotate(self, angles_rad, order="xyz"):
         """
         Rotate the element by Euler angles (in radians) around X, Y, Z axes.
@@ -170,10 +170,15 @@ class _GraphicalElement:
         Destroy this element and remove all its pygfx objects from the scene.
         This properly deallocates GPU resources by removing objects from the scene graph.
         """
-        # Remove all pygfx objects from the scene
-        for gfx_obj in self._gfx_objects:
+        # Make a copy of the list since we'll be modifying it during iteration
+        gfx_objects_copy = list(self._gfx_objects)
+        
+        for gfx_obj in gfx_objects_copy:
+            # Remove from scene graph (only if it's actually a child of the scene)
             if gfx_obj.parent is not None:
                 gfx_obj.parent.remove(gfx_obj)
+        
+        # Clear our internal tracking list
         self._gfx_objects.clear()
         
         # Unregister from page's interactive element lists
@@ -183,6 +188,8 @@ class _GraphicalElement:
                 page.hoverable_elements.remove(self)
             if self in page.clickable_elements:
                 page.clickable_elements.remove(self)
+            if self in page.scrollable_elements:
+                page.scrollable_elements.remove(self)
             if self in page.awaiting_mouse_up:
                 page.awaiting_mouse_up.remove(self)
             if self in page.awaiting_hover_out:
@@ -195,6 +202,10 @@ class _GraphicalElement:
     def register_clickable(self):
         if self not in self.page.clickable_elements:
             self.page.clickable_elements.append(self)
+
+    def register_scrollable(self):
+        if self not in self.page.scrollable_elements:
+            self.page.scrollable_elements.append(self)
 
     def add_pointer_move_inside_callback(self, callback):
         # if not registered as hoverable yet, do it now
@@ -217,14 +228,20 @@ class _GraphicalElement:
     def on_pointer_move_inside(self, event, page_coords):
         # 1. graphical things proper to this element
         ...
-        # 2. user-defined callback
+        # 2. particle magnet behavior
+        if self.is_particle_magnet:
+            self._update_particles_inside(page_coords)
+        # 3. user-defined callback
         if self._callback_on_pointer_move_inside is not None:
             self._callback_on_pointer_move_inside(event, self, page_coords)
 
     def on_pointer_move_outside(self, event, page_coords):
         # 1. graphical things proper to this element
         ...
-        # 2. user-defined callback
+        # 2. particle magnet behavior (rush to cursor)
+        if self.is_particle_magnet:
+            self._update_particles_outside(page_coords)
+        # 3. user-defined callback
         if self._callback_on_pointer_move_outside is not None:
             self._callback_on_pointer_move_outside(event, self, page_coords)
 
@@ -239,9 +256,46 @@ class _GraphicalElement:
         if self._callback_pointer_click is not None:
             self._callback_pointer_click(event, self, page_coords)
 
+    def on_wheel(self, event, page_coords):
+        """Handle wheel scroll event. Override in subclasses to implement scroll behavior."""
+        pass
+
     def stop_pointer_down_effect(self):
         # graphical things proper to this element
         ...
+
+    def enable_particle_magnet(self):
+        """Enable particle magnet behavior for this element."""
+        self.is_particle_magnet = True
+        self.register_hoverable()
+
+    def _update_particles_inside(self, page_coords):
+        """Called when pointer moves inside a particle magnet element."""
+        particles = getattr(self.page, 'overlay_particles', None)
+        if particles is None:
+            return
+        
+        # Convert page coords to scene coords
+        page_bl = self.page.bl
+        cursor_scene_xy = (page_bl[0] + page_coords[0], page_bl[1] + page_coords[1])
+        
+        # First entry or update cursor
+        if particles._target_element is not self:
+            particles.enter_element(self, cursor_scene_xy)
+        else:
+            particles.update_cursor(cursor_scene_xy)
+
+    def _update_particles_outside(self, page_coords):
+        """Called when pointer leaves a particle magnet element."""
+        particles = getattr(self.page, 'overlay_particles', None)
+        if particles is None:
+            return
+        
+        # Update cursor position and switch to chasing mode
+        page_bl = self.page.bl
+        cursor_scene_xy = (page_bl[0] + page_coords[0], page_bl[1] + page_coords[1])
+        particles.update_cursor(cursor_scene_xy)
+        particles.leave_element()
 
 class Element_2d(_GraphicalElement):
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, colour=None, background_colour=None): # pos_xy_rel: bottom-left corner
@@ -253,7 +307,6 @@ class Element_2d(_GraphicalElement):
         if sum(borders) == 0:
             return  # no borders to create
         
-        # Define corners relative to center (for proper rotation around center)
         hw, hh = self.size[0] / 2, self.size[1] / 2
         lines = []
         
@@ -284,7 +337,6 @@ class Element_2d(_GraphicalElement):
         
         self.border_lines = lines
         for line in self.border_lines:
-            # Position at center (rotation will work correctly around this point)
             line.local.position = self.center
             self.register_gfx_object(line)
 
@@ -296,12 +348,14 @@ class Element_3d(_GraphicalElement):
 class Container(Element_2d):
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, borders = (0, 0, 0, 0), colour=None, background_colour=None):
         # borders: (top, right, bottom, left) "0" means no border, "1" means full border
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, background_colour=background_colour)
+        self.is_container = True
         self.is_leaf  = False
         self.children = []
         self.children_dict = {}
         self.border_flags = borders
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, background_colour=background_colour)
         self._make_borders(borders)
+        self.on_show = None  # user-defined callback when container is shown
     
     def add(self, child_element):
         child_element.parent = self
@@ -320,13 +374,33 @@ class Container(Element_2d):
         else:
             for child in self.children:
                 if not child.is_leaf:
-                    result = child.get_child(child_name)
+                    result = child.get(child_name)
                     if result is not None:
                         return result
         return None
+    
+    def remove(self, child_element):
+        if child_element in self.children:
+            self.children.remove(child_element)
+            del self.children_dict[child_element.name]
+            child_element.die()
+            child_element.parent = None
+            return True
+        return False
+    
+    def remove_by_name(self, child_name):
+        # First check direct children
+        if child_name in self.children_dict:
+            child_element = self.children_dict[child_name]
+            return self.remove(child_element)
+        # Search recursively in nested containers
+        for child in self.children:
+            if not child.is_leaf:
+                if child.remove_by_name(child_name):
+                    return True
+        return False
 
     def die(self):
-        """Destroy this container and all its children recursively."""
         for child in self.children:
             child.die()
         self.children.clear()
@@ -342,6 +416,8 @@ class Container(Element_2d):
         for child in self.children:
             child.show()
         super().show()
+        if self.on_show is not None:
+            self.on_show(self)
 
     def move_to(self, new_center_xyz_px):
         super().move_to(new_center_xyz_px)

@@ -51,14 +51,20 @@ class _Receiver:
         ack_received = False
         while not self._queue.empty():
             # 1. process incoming message
-            event_name, event_data = self._queue.get()
+            message = self._queue.get()
+            if len(message) == 2:
+                event_name, event_data = message
+                needs_ack = True
+            else:
+                event_name, event_data, needs_ack = message
+            
             if event_name in self.listeners:
                 self.listeners[event_name](event_data)
             else:
                 print(f"Warning: unhandled event '{event_name}' received with data: {event_data}")
-            # 2. send ack if not an ack event
+            # 2. send ack if not an ack event and if the sender requested an ack
             is_ack_event = event_name.endswith(" ack")
-            if not is_ack_event:
+            if needs_ack and not is_ack_event:
                 sender.send(event_name + " ack", event_name)
             ack_received = ack_received or is_ack_event
         return ack_received
@@ -72,8 +78,8 @@ class _Sender:
         self._queue = queue_out
         self._send_timers = {} # event_name -> last send time (for throttling)
     
-    def send(self, event_name, event_data=None):
-        self._queue.put((event_name, event_data))
+    def send(self, event_name, event_data=None, needs_ack=True):
+        self._queue.put((event_name, event_data, needs_ack))
 
 class Communications:
     def __init__(self, queue_rcv, queue_out, shared_dict, listeners):
@@ -84,6 +90,7 @@ class Communications:
         self.sender    = _Sender(queue_out)
         self.outgoing_messages_ready = {} # [event_name] = ready to send   (waits for ack of previous message)
         self.pending_outgoing        = {} # if not acked yet: put here the data to send later
+        self.pending_no_ack          = {} # for send_without_ack: latest data per event_name (overrides)
 
         # - for continuous data sharing (not event based): shared dictionary
         self.shared    = _Shared_dict(shared_dict) 
@@ -105,18 +112,43 @@ class Communications:
                 del self.pending_outgoing[event_name]
                 self.outgoing_messages_ready[event_name] = False
 
-    def send(self, event_name, event_data=None):
+    def send(self, event_name, event_data=None, needs_ack=True):
+        # If no ack needed, bypass flow control entirely
+        if not needs_ack:
+            self.sender.send(event_name, event_data, needs_ack=False)
+            return
         # Register the message if not already done
         if event_name not in self.outgoing_messages_ready:
             self._register_outgoing_message(event_name)
         # Send or set as pending
+        has_overridden = False
         if self.outgoing_messages_ready[event_name]:
-            self.sender.send(event_name, event_data)
+            self.sender.send(event_name, event_data, needs_ack=True)
             self.outgoing_messages_ready[event_name] = False
         else:
             self.pending_outgoing[event_name] = event_data
+            has_overridden = True
+        return has_overridden
 
     def process_messages(self):
         ack_received = self.receiver.process(self.sender)
         if ack_received:
             self._send_pending()
+
+    def empty_queues(self):
+        try:
+            while not self.sender._queue.empty():
+                self.sender._queue.get_nowait()
+        except:
+            pass
+        try:
+            while not self.receiver._queue.empty():
+                self.receiver._queue.get_nowait()
+        except:
+            pass
+
+    def cancel_join_threads(self):
+        """Call before process exit to prevent hanging on queue feeder threads.
+        This tells Python not to wait for background threads that flush data to pipes."""
+        self.sender._queue.cancel_join_thread()
+        self.receiver._queue.cancel_join_thread()
