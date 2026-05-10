@@ -19,12 +19,19 @@ class Intro_Page(Page):
         main_container = Container(page_name+"Main Container", self, (0.0, 0.0), (1.0, 1.0), borders=(0,0,0,0))
         self.add_container(main_container)
         btn_a = Button_2d(page_name+"btn a", main_container, (0.1, 0.3), (0.3, 0.4),
-                          text="next page", text_colour=AMBER, colour=AMBER,
+                          text="queue based", text_colour=AMBER, colour=AMBER,
                           pointer_click_callback=self.on_button_a_clicked)
         self.btn_a = btn_a
+        btn_b = Button_2d(page_name+"btn b", main_container, (0.6, 0.3), (0.3, 0.4),
+                          text="shared memory", text_colour=PINK_ELECTRIC, colour=PINK_ELECTRIC,
+                          pointer_click_callback=self.on_button_b_clicked)
+        self.btn_b = btn_b
 
     def one_frame(self, mouse_coords=(0, 0)):
         super().one_frame(mouse_coords)
 
     def on_button_a_clicked(self, event, element, page_coords):
         self.frontend.switch_to_main_page()
+
+    def on_button_b_clicked(self, event, element, page_coords):
+        self.frontend.switch_to_shared_memory_page()

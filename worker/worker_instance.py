@@ -145,6 +145,11 @@ class WorkerInstance:
         self.comms.empty_queues()
         self.comms.cancel_join_threads()
         self.data_stream_comms.cancel_join_threads()
+        # Release any shared-memory blocks owned by this worker (e.g. positions).
+        # Must happen AFTER we drain the queues but BEFORE the CUDA context is
+        # released, so the frontend has had a chance to consume the last frame.
+        self.comms.release_all_shared_arrays()
+        self.data_stream_comms.release_all_shared_arrays()
         # Release CUDA resources (GPU allocations, streams, modules, context).
         self.cuda_ctx.exit()
         self.running = False

@@ -5,6 +5,8 @@
 # event/ACK protocol used by frontend, backend, and worker instances.
 
 import time
+from multiprocessing import shared_memory
+import numpy as np
 
 """ Shared dictionary wrapper """
 class _Shared_dict:
@@ -101,6 +103,13 @@ class Communications:
         # - for continuous data sharing (not event based): shared dictionary
         self.shared    = _Shared_dict(shared_dict) 
 
+        # - shared-memory arrays for high-throughput numpy data (zero-copy
+        #   inter-process transfer; used as an alternative to shipping large
+        #   arrays through the queues). Tracked here so they can be released
+        #   on teardown. See `create_shared_array`/`attach_shared_array`.
+        self._owned_shm    = {} # key -> (shm, ndarray, shape, dtype)
+        self._attached_shm = {} # key -> (shm, ndarray, shape, dtype)
+
     def _register_outgoing_message(self, event_name):
         assert event_name not in self.outgoing_messages_ready, f"Outgoing message '{event_name}' already registered."
         self.outgoing_messages_ready[event_name] = True
@@ -161,3 +170,73 @@ class Communications:
             cancel = getattr(q, "cancel_join_thread", None)
             if callable(cancel):
                 cancel()
+
+    # -------------------------------------------- shared-memory numpy arrays
+    def create_shared_array(self, key, shape, dtype):
+        """Create a new shared-memory block big enough to hold a numpy array
+        of the given shape and dtype. Returns a numpy view onto that block.
+
+        The owning process must keep the returned `Communications` alive for
+        the lifetime of the array (we hold a reference to the `SharedMemory`
+        handle in `_owned_shm`). Call `release_shared_array(key)` or
+        `release_all_shared_arrays()` to free it.
+        """
+        assert key not in self._owned_shm,    f"Shared array '{key}' already owned by this Communications."
+        assert key not in self._attached_shm, f"Shared array '{key}' already attached to this Communications."
+        dtype = np.dtype(dtype)
+        n_bytes = int(np.prod(shape)) * dtype.itemsize
+        shm = shared_memory.SharedMemory(create=True, size=n_bytes)
+        arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+        self._owned_shm[key] = (shm, arr, tuple(shape), dtype)
+        return arr
+
+    def attach_shared_array(self, key, name, shape, dtype):
+        """Attach to an existing shared-memory block by `name` (created by
+        another process via `create_shared_array`). Returns a numpy view.
+        Call `release_shared_array(key)` or `release_all_shared_arrays()` to
+        detach (only the owning side should `unlink`)."""
+        assert key not in self._owned_shm,    f"Shared array '{key}' already owned by this Communications."
+        assert key not in self._attached_shm, f"Shared array '{key}' already attached to this Communications."
+        dtype = np.dtype(dtype)
+        shm = shared_memory.SharedMemory(name=name)
+        arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+        self._attached_shm[key] = (shm, arr, tuple(shape), dtype)
+        return arr
+
+    def get_shared_array(self, key):
+        """Return the numpy view for a previously created or attached shared array."""
+        if key in self._owned_shm:
+            return self._owned_shm[key][1]
+        if key in self._attached_shm:
+            return self._attached_shm[key][1]
+        return None
+
+    def get_shared_array_info(self, key):
+        """Return `{"name", "shape", "dtype"}` for a previously *created* (owned)
+        shared array. Use this to propagate the descriptor to other processes
+        (e.g. via the `info for frontend` channel)."""
+        assert key in self._owned_shm, f"Shared array '{key}' is not owned by this Communications (cannot describe an attached array)."
+        shm, _arr, shape, dtype = self._owned_shm[key]
+        return {"name": shm.name, "shape": list(shape), "dtype": dtype.str.lstrip("<>=|")}
+
+    def release_shared_array(self, key):
+        """Release a single shared array. Owning side closes + unlinks; the
+        attached side only closes."""
+        if key in self._owned_shm:
+            shm, arr, _shape, _dtype = self._owned_shm.pop(key)
+            del arr  # drop numpy view referencing the buffer
+            try: shm.close()
+            except Exception: pass
+            try: shm.unlink()
+            except Exception: pass
+        elif key in self._attached_shm:
+            shm, arr, _shape, _dtype = self._attached_shm.pop(key)
+            del arr
+            try: shm.close()
+            except Exception: pass
+
+    def release_all_shared_arrays(self):
+        for key in list(self._attached_shm.keys()):
+            self.release_shared_array(key)
+        for key in list(self._owned_shm.keys()):
+            self.release_shared_array(key)

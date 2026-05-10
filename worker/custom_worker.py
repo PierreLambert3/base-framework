@@ -87,8 +87,21 @@ class CustomWorker(WorkerInstance):
         self.streams = _Streams(self.cuda_ctx)
         self.kernels = _Kernels(self, self.cuda_ctx)
 
-        # Pre-allocated host buffer for D->H transfers (avoids per-chunk allocation).
-        self._positions_host = np.empty((n_points, 2), dtype=np.float32)
+        # Transport for positions: either a per-chunk queue payload (default)
+        # or a shared-memory block (`use_shared_memory: True` in config). The
+        # shared block is owned by this worker; its name is shipped to the
+        # frontend via `_make_info_for_frontend`.
+        self._use_shared_memory = bool(self.config.get("use_shared_memory", False))
+        self._frame_id          = 0
+        if self._use_shared_memory:
+            # `data_stream_comms` owns the SHM block (matches the channel the
+            # frontend listens on for the doorbell notification).
+            self._positions_host = self.data_stream_comms.create_shared_array(
+                "positions", (n_points, 2), np.float32,
+            )
+        else:
+            # Pre-allocated host buffer for D->H transfers (avoids per-chunk allocation).
+            self._positions_host = np.empty((n_points, 2), dtype=np.float32)
 
     def _on_exit(self, data):
         # Make sure all GPU work has completed before the context is released.
@@ -97,6 +110,10 @@ class CustomWorker(WorkerInstance):
     def _make_info_for_frontend(self):
         info = super()._make_info_for_frontend()
         info["n_points"] = self._n_points
+        if self._use_shared_memory:
+            info["shared_memory"] = {
+                "positions": self.data_stream_comms.get_shared_array_info("positions"),
+            }
         return info
 
     def run_simulation_chunk(self, chunk_size, selected_by_frontend, high_speed_mode):
@@ -107,10 +124,19 @@ class CustomWorker(WorkerInstance):
         self._positions_gpu.to_host(out=self._positions_host, stream=self.streams.compute)
         self.streams.compute.sync()
 
-        # 3. Stream positions to the frontend (fire-and-forget). The queue
-        #    serialises the array, so a fresh snapshot is sent each chunk.
-        self.data_stream_comms.send(
-            "data stream: positions",
-            {"positions": self._positions_host},
-            needs_ack=False,
-        )
+        # 3. Notify the frontend. With shared memory, the host buffer IS the
+        #    inter-process buffer, so we only ring a doorbell with a frame id.
+        #    With queues, we ship the array itself (fire-and-forget snapshot).
+        if self._use_shared_memory:
+            self._frame_id += 1
+            self.data_stream_comms.send(
+                "data stream: positions ready",
+                {"frame_id": self._frame_id},
+                needs_ack=False,
+            )
+        else:
+            self.data_stream_comms.send(
+                "data stream: positions",
+                {"positions": self._positions_host},
+                needs_ack=False,
+            )

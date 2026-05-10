@@ -13,6 +13,7 @@ from GUI.engine.comms import _Listeners, Communications
 from GUI.engine.frontend.logic import Front_End
 from GUI.pages.IntroPage import Intro_Page
 from GUI.pages.MainPage  import Main_Page
+from GUI.pages.SharedMemoryPage import Shared_Memory_Page
 
 CHUNK_SPEEDS = [4, 40, 180, 1000]
 
@@ -60,6 +61,15 @@ class Custom_Frontend(Front_End):
         self._set_camera_look_at((1000, 800, 0.0))
         self._store_default_camera_state()
         self.add_page(Main_Page(self.scene, "main page", self))
+
+    def switch_to_shared_memory_page(self):
+        self.set_fps(20)
+        if self.current_page is not None:
+            self.current_page.destroy()
+        self.scene.camera.local.position = (1000, 800, 2000)
+        self._set_camera_look_at((1000, 800, 0.0))
+        self._store_default_camera_state()
+        self.add_page(Shared_Memory_Page(self.scene, "shared memory page", self))
     
     # ---------------------------------------------------- data stream wiring
     def register_data_stream_comms_for_instance(self, instance_name, queue_from_backend, queue_to_backend):
