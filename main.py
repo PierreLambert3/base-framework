@@ -1,3 +1,9 @@
+# Wiki: see wiki/01-architecture.md (process layout) and
+# wiki/09-example-walkthrough.md (end-to-end trace).
+# This is the entry point: it creates the multiprocessing context, the
+# inter-process queues and the shared dict, then starts the frontend
+# (separate process) and the backend (this process).
+
 import multiprocessing
 from GUI.gui     import Custom_Frontend
 from GUI.backend import Custom_Backend

@@ -1,3 +1,10 @@
+# Wiki: wiki/05-pages-and-elements.md, wiki/06-worker-instances.md,
+#       wiki/09-example-walkthrough.md (this page is the main demo),
+#       wiki/08-extending-the-framework.md (recipe: subscribe a page to a
+#       worker's data stream).
+# Demonstrates how a page allocates per-instance UI on `on_new_worker_instance`,
+# subscribes to its data-stream channel, and signals readiness to the worker.
+
 import math
 import numpy as np
 

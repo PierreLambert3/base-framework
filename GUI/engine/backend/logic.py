@@ -1,3 +1,7 @@
+# Wiki: wiki/03-backend.md (engine base class for the backend process).
+# Engine file -- do not edit for project work; subclass `Back_End`
+# (see `GUI/backend.py::Custom_Backend`).
+
 import time
 from GUI.engine.comms import _Listeners, Communications
 

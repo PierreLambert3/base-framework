@@ -1,3 +1,7 @@
+# Wiki: wiki/05-pages-and-elements.md (page tree),
+#       wiki/08-extending-the-framework.md (recipe: add a new page).
+# Minimal example page: one button that switches to the main page.
+
 from GUI.engine.frontend.graphical_elements.button import Button_2d
 from GUI.engine.frontend.page import Page
 from GUI.engine.frontend.graphical_elements.graphical_element import Container

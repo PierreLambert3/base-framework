@@ -1,3 +1,7 @@
+# Wiki: wiki/04-frontend.md (engine base class for the frontend process).
+# Engine file -- do not edit for project work; subclass `Front_End`
+# (see `GUI/gui.py::Custom_Frontend`).
+
 import numpy as np
 import time
 from rendercanvas.auto import loop

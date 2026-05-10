@@ -1,3 +1,9 @@
+# Wiki: wiki/05-pages-and-elements.md
+# Engine base classes for the GUI tree: `_GraphicalElement` (root),
+# `Element_2d` (relative-coords leaf), `Element_3d`, `Container` (recursive).
+# Concrete leaf widgets live as siblings in this directory (button.py,
+# scatterplot_2d_dynamic.py, ...).
+
 import pygfx
 import numpy as np
 from pylinalg import quat_from_axis_angle, quat_from_euler, quat_mul

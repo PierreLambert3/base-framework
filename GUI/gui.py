@@ -1,3 +1,9 @@
+# Wiki: wiki/04-frontend.md (project-side frontend, scene, input, camera)
+# Related: wiki/01-architecture.md, wiki/02-communications.md (per-instance
+#          data-stream channel), wiki/05-pages-and-elements.md.
+# Subclass `Custom_Frontend` for project-specific behaviour; do not modify
+# `GUI/engine/frontend/logic.py` (the engine base class).
+
 import multiprocessing
 import time
 from rendercanvas.auto import loop
@@ -31,6 +37,13 @@ class Custom_Frontend(Front_End):
     def build_listeners(self): # communications with the backend
         self.add_listener("Q1: how many timesteps per simulation chunk", self._handle_how_many_timesteps_per_simulation_chunk)
         self.add_listener("new worker instance created",                self._handle_new_worker_instance_created)
+        self.add_listener("worker instance info",                       self._handle_worker_instance_info)
+
+    def _handle_worker_instance_info(self, data):
+        """Project-specific metadata sent by a worker instance once it has
+        finished `initialise()`. Forwarded to the current page if it cares."""
+        if self.current_page is not None and hasattr(self.current_page, "on_worker_instance_info"):
+            self.current_page.on_worker_instance_info(data)
     
     def load_intro_page(self):
         self.set_fps(26)

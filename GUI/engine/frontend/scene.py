@@ -1,3 +1,8 @@
+# Wiki: wiki/04-frontend.md (camera & scene), wiki/05-pages-and-elements.md
+# (pick-mesh ray casting used by the page tree).
+# Engine file -- pygfx scene + camera + ray-cast helpers used by the page
+# system. Project code should not need to subclass `Scene`.
+
 import pygfx 
 from rendercanvas.auto import RenderCanvas, loop
 import pylinalg as la

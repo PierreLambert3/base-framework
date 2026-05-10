@@ -1,3 +1,9 @@
+# Wiki: wiki/02-communications.md
+# Centralised inter-process communication: event queues with automatic ACK
+# (latest-wins flow control) and a Manager().dict() for hot continuous state.
+# Read alongside the wiki page; this is the single source of truth for the
+# event/ACK protocol used by frontend, backend, and worker instances.
+
 import time
 
 """ Shared dictionary wrapper """
@@ -149,6 +155,9 @@ class Communications:
 
     def cancel_join_threads(self):
         """Call before process exit to prevent hanging on queue feeder threads.
-        This tells Python not to wait for background threads that flush data to pipes."""
-        self.sender._queue.cancel_join_thread()
-        self.receiver._queue.cancel_join_thread()
+        This tells Python not to wait for background threads that flush data to pipes.
+        Manager-backed queues (AutoProxy[Queue]) don't expose this method, so we skip them."""
+        for q in (self.sender._queue, self.receiver._queue):
+            cancel = getattr(q, "cancel_join_thread", None)
+            if callable(cancel):
+                cancel()

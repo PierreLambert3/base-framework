@@ -1,3 +1,7 @@
+# Wiki: wiki/05-pages-and-elements.md (Page / Container / Element_2d hierarchy).
+# Related: wiki/04-frontend.md (per-frame contract), wiki/08-extending-the-framework.md
+# (recipes for adding pages and subscribing to worker data streams).
+
 from GUI.engine.frontend.graphical_elements.graphical_element import _GraphicalElement
 import pygfx
 import numpy as np
