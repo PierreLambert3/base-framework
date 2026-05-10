@@ -1,6 +1,6 @@
 import multiprocessing
-from GUI.gui       import Custom_Frontend
-from worker.worker import Custom_Backend
+from GUI.gui     import Custom_Frontend
+from GUI.backend import Custom_Backend
 
 
 if __name__ == "__main__":

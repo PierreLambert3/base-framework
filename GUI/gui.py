@@ -6,6 +6,7 @@ import numpy as np
 from GUI.engine.comms import _Listeners, Communications
 from GUI.engine.frontend.logic import Front_End
 from GUI.pages.IntroPage import Intro_Page
+from GUI.pages.MainPage  import Main_Page
 
 CHUNK_SPEEDS = [4, 40, 180, 1000]
 
@@ -29,6 +30,7 @@ class Custom_Frontend(Front_End):
 
     def build_listeners(self): # communications with the backend
         self.add_listener("Q1: how many timesteps per simulation chunk", self._handle_how_many_timesteps_per_simulation_chunk)
+        self.add_listener("new worker instance created",                self._handle_new_worker_instance_created)
     
     def load_intro_page(self):
         self.set_fps(26)
@@ -36,6 +38,39 @@ class Custom_Frontend(Front_End):
         self._set_camera_look_at((1000, 800, 0.0))
         self._store_default_camera_state()
         self.add_page(Intro_Page(self.scene, "The Main Page", self))
+    
+    def switch_to_main_page(self):
+        self.set_fps(20)
+        if self.current_page is not None:
+            self.current_page.destroy()
+        self.scene.camera.local.position = (1000, 800, 2000)
+        self._set_camera_look_at((1000, 800, 0.0))
+        self._store_default_camera_state()
+        self.add_page(Main_Page(self.scene, "main page", self))
+    
+    # ---------------------------------------------------- data stream wiring
+    def register_data_stream_comms_for_instance(self, instance_name, queue_from_backend, queue_to_backend):
+        """Create dedicated data stream Communications for a worker instance."""
+        listeners = _Listeners()
+        comms     = Communications(queue_from_backend, queue_to_backend, self.comms.shared, listeners)
+        self.data_stream_comms_per_instance[instance_name] = {"comms": comms, "listeners": listeners}
+
+    def add_data_stream_listener(self, instance_name, event_name, callback):
+        """Register a listener on a specific instance's data stream channel."""
+        if instance_name not in self.data_stream_comms_per_instance:
+            print(f"Warning: no data stream comms registered for instance '{instance_name}'")
+            return
+        self.data_stream_comms_per_instance[instance_name]["listeners"].add(event_name, callback)
+
+    def _handle_new_worker_instance_created(self, data):
+        """Backend has spawned a worker instance: hook up data stream comms,
+        and let the current page allocate visualisation resources."""
+        instance_name = data["instance name"]
+        config        = data.get("config", {})
+        q_from_back, q_to_back = data["data_stream_queues"]
+        self.register_data_stream_comms_for_instance(instance_name, q_from_back, q_to_back)
+        if self.current_page is not None and hasattr(self.current_page, "on_new_worker_instance"):
+            self.current_page.on_new_worker_instance(instance_name, config)
     
     def _store_default_camera_state(self):
         """Store the current camera position and orientation as the default state."""
@@ -66,20 +101,11 @@ class Custom_Frontend(Front_End):
         new_target = self.current_look_at_target + self.look_at_lerp_factor * (target_arr - self.current_look_at_target)
         self._set_camera_look_at(new_target)
 
-    def load_sandbox_page(self):
-        self.set_fps(10)
-        self.current_page.destroy()
-        self.scene.camera.local.position = (1000*2, 2*800, 2000)
-        self._set_camera_look_at((1000*2, 2*800, 0.0))
-        self._store_default_camera_state()
-        # self.add_page(SandboxPage(self.scene, "The Sandbox Page", self))
-
-
     def exit_program(self, data):
         super().exit_program(data)
-        """ # Clean up data stream comms for all instances
+        # Clean up data stream comms for all instances
         for instance_data in self.data_stream_comms_per_instance.values():
-            instance_data["comms"].empty_queues() """
+            instance_data["comms"].empty_queues()
 
     def on_user_event(self, event):
         mouse_event = (event["event_type"] == "pointer_move" or event["event_type"] == "pointer_down" or event["event_type"] == "pointer_up")
@@ -198,9 +224,9 @@ class Custom_Frontend(Front_End):
 
     def process_messages(self):
         self.comms.process_messages()
-        """ # Process data stream comms for all instances
+        # Process data stream comms for all instances (high-throughput, no ACK)
         for instance_data in self.data_stream_comms_per_instance.values():
-            instance_data["comms"].process_messages() """
+            instance_data["comms"].process_messages()
 
     def routine(self):
         # 1. initialisation

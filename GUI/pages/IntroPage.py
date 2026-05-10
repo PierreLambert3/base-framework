@@ -14,20 +14,13 @@ class Intro_Page(Page):
         
         main_container = Container(page_name+"Main Container", self, (0.0, 0.0), (1.0, 1.0), borders=(0,0,0,0))
         self.add_container(main_container)
-        btn_genetic = Button_2d(page_name+"btn genetic", main_container, (0.1, 0.3), (0.3, 0.4), 
-                                text="button 1", text_colour=AMBER, colour=AMBER,
-                                pointer_click_callback=self.on_genetic_button_clicked)
-        btn_sandbox = Button_2d(page_name+"btn sandbox", main_container, (0.6, 0.3), (0.3, 0.4), 
-                                text="button 2", text_colour=AMBER, colour=AMBER,
-                                pointer_click_callback=self.on_sandbox_button_clicked)
-        self.btn_genetic = btn_genetic
-        self.btn_sandbox = btn_sandbox
+        btn_a = Button_2d(page_name+"btn a", main_container, (0.1, 0.3), (0.3, 0.4),
+                          text="next page", text_colour=AMBER, colour=AMBER,
+                          pointer_click_callback=self.on_button_a_clicked)
+        self.btn_a = btn_a
 
     def one_frame(self, mouse_coords=(0, 0)):
         super().one_frame(mouse_coords)
 
-    def on_genetic_button_clicked(self, event, element, page_coords):
-        print("button 1 clicked")
-    
-    def on_sandbox_button_clicked(self, event, element, page_coords):
-        print("button 2 clicked")
+    def on_button_a_clicked(self, event, element, page_coords):
+        self.frontend.switch_to_main_page()
