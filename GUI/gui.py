@@ -14,8 +14,7 @@ from GUI.engine.frontend.logic import Front_End
 from GUI.pages.IntroPage import Intro_Page
 from GUI.pages.MainPage  import Main_Page
 from GUI.pages.SharedMemoryPage import Shared_Memory_Page
-
-CHUNK_SPEEDS = [4, 40, 180, 1000]
+from worker.global_constants import SIMULATION_CHUNK_SIZE
 
 class Custom_Frontend(Front_End):
     def __init__(self, multiprocessing_context, queue_from_backend, queue_to_backend, shared_dict, window_name="Custom GUI Frontend Window"):
@@ -25,7 +24,7 @@ class Custom_Frontend(Front_End):
         self.data_stream_comms_per_instance = {}  # instance_name -> Communications
 
         self.set_fps(26)
-        self.simulation_chunk_size_timesteps = CHUNK_SPEEDS[0]
+        self.simulation_chunk_size_timesteps = SIMULATION_CHUNK_SIZE[0]
         
         # Zoom settings
         self.default_camera_position = None   # Set after scene init
@@ -153,9 +152,9 @@ class Custom_Frontend(Front_End):
                 if key == "Escape":
                     self.exit_program(0)
                 elif key == "f":
-                    current_index = CHUNK_SPEEDS.index(self.simulation_chunk_size_timesteps)
-                    next_index = (current_index + 1) % len(CHUNK_SPEEDS)
-                    self.simulation_chunk_size_timesteps = CHUNK_SPEEDS[next_index]
+                    current_index = SIMULATION_CHUNK_SIZE.index(self.simulation_chunk_size_timesteps)
+                    next_index = (current_index + 1) % len(SIMULATION_CHUNK_SIZE)
+                    self.simulation_chunk_size_timesteps = SIMULATION_CHUNK_SIZE[next_index]
                     self._handle_how_many_timesteps_per_simulation_chunk(None)
     
     def _handle_wheel_event(self, event):

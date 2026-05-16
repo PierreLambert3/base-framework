@@ -12,7 +12,7 @@ from GUI.engine.comms import Communications
 from cuda_wrapper import CUDAManager
 
 from worker.worker_instance import WorkerInstance, comms_prefix
-from worker.custom_worker  import CustomWorker
+from custom_worker  import CustomWorker
 
 
 class Custom_Backend(Back_End):

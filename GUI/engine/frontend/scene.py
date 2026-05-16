@@ -12,6 +12,11 @@ class Scene:
     def __init__(self, canvas_title):
         window_size   = (1000, 800)
         self.canvas   = RenderCanvas(title=canvas_title, size=window_size)
+        if hasattr(self.canvas, "_window"):
+            import glfw
+            wx, wy, ww, wh = glfw.get_monitor_workarea(glfw.get_primary_monitor())
+            win_w, win_h = glfw.get_window_size(self.canvas._window)
+            glfw.set_window_pos(self.canvas._window, wx + ww - win_w, wy + 1)
         self.renderer = pygfx.WgpuRenderer(self.canvas)
         self.scene    = pygfx.Scene()
         self.scene.add(pygfx.Background.from_color("#000"))
