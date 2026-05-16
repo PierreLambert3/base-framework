@@ -10,7 +10,7 @@ import multiprocessing
 import time
 import numpy as np
 
-from worker.global_constants import TIMESTEP_DURATION_MS, SIMULATION_CHUNK_SIZE
+from GUI.engine.worker.global_constants import TIMESTEP_DURATION_MS, SIMULATION_CHUNK_SIZE
 
 from GUI.engine.comms import _Listeners, Communications
 

@@ -7,8 +7,8 @@ import numpy as np
 
 from cuda_wrapper import LaunchConfig1D, DeviceProperties
 
-from worker.worker_instance import WorkerInstance
-from worker.global_constants import TIMESTEP_DURATION_MS
+from GUI.engine.worker.worker_instance import WorkerInstance
+from GUI.engine.worker.global_constants import TIMESTEP_DURATION_MS
 
 
 class _Kernels:

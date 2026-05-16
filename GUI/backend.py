@@ -11,7 +11,7 @@ from GUI.engine.comms import Communications
 
 from cuda_wrapper import CUDAManager
 
-from worker.worker_instance import WorkerInstance, comms_prefix
+from GUI.engine.worker.worker_instance import WorkerInstance, comms_prefix
 from custom_worker  import CustomWorker
 
 

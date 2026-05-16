@@ -14,7 +14,7 @@ from GUI.engine.frontend.logic import Front_End
 from GUI.pages.IntroPage import Intro_Page
 from GUI.pages.MainPage  import Main_Page
 from GUI.pages.SharedMemoryPage import Shared_Memory_Page
-from worker.global_constants import SIMULATION_CHUNK_SIZE
+from GUI.engine.worker.global_constants import SIMULATION_CHUNK_SIZE
 
 class Custom_Frontend(Front_End):
     def __init__(self, multiprocessing_context, queue_from_backend, queue_to_backend, shared_dict, window_name="Custom GUI Frontend Window"):
