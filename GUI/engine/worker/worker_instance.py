@@ -113,24 +113,9 @@ class WorkerInstance:
             self.process_messages()
 
         # 4. main simulation loop
-        EMA_simulated_seconds_per_real_second = 1.0
         while self.process_messages():
             tic = time.time()
             self.run_simulation_chunk(self.simulation_chunk_size, self.selected_by_frontend, self.high_speed_mode)
-
-            if self.selected_by_frontend:
-                elapsed_s = time.time() - tic
-                if elapsed_s > 0:
-                    EMA_simulated_seconds_per_real_second = (
-                        0.95 * EMA_simulated_seconds_per_real_second
-                        + 0.05 * ((self.simulation_chunk_size * TIMESTEP_DURATION_MS / 1000.0) / elapsed_s)
-                    )
-                self.comms.send("seconds per real second update", {
-                    "sec per sec": EMA_simulated_seconds_per_real_second,
-                    "chunk size":  self.simulation_chunk_size,
-                })
-            # tiny sleep to reduce contention on the data stream queues
-            time.sleep(0.06)
 
     # ----------------------------------------------------------- wiring/utils
     def build_listeners(self):
