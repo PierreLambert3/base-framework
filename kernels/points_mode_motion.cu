@@ -29,26 +29,51 @@
 #include "basics/randoms.cuh"
 
 
-#define NESTEROV_COEFF 1.6f
-#define MOMENTUM 0.97f
+#define MOMENTUM 0.95f
+
+// NESTEROV_COEFF should be the time constant of MOMENTUM, in iterations (time until 1 becomes 1/e)
+#define NESTEROV_COEFF 0.9f
+
 
 #define ATTRACTION_MULTIPLIER 0.5f
-#define ENDPOINTEDNESS 0.5f
-#define NOISE_INTENSITY 0.201f
+#define NOISE_INTENSITY 0.8f
+#define UPAWARDS_INTENSITY 0.005f
 
+
+__device__ void perturbation_from_normal_vector(
+    float px, float py, float pz,
+    float* vx, float* vy, float* vz,
+    int32_t line_idx,
+    const float* lines,
+    float upwards_mul,
+    uint32_t* seed_thd
+) {
+    if(upwards_mul < 0.001f) {return;}
+    float scale = upwards_mul * UPAWARDS_INTENSITY;
+
+    const float nx = lines[line_idx * 9u + 6];
+    const float ny = lines[line_idx * 9u + 7];
+    const float nz = lines[line_idx * 9u + 8];
+
+    float r = rand(seed_thd) * 2.0f - 1.0f;
+    vx[0] += scale * fabsf(r * r * r * r) * 2.0f * nx * 2.0f;
+    r = rand(seed_thd) * 2.0f - 1.0f;
+    vy[0] += scale * fabsf(r * r * r * r) * 2.0f * ny * 2.0f;
+    r = rand(seed_thd) * 2.0f - 1.0f;
+    vz[0] += scale * fabsf(r * r * r * r) * 2.0f * nz * 2.0f;
+}
 
 __device__ __forceinline__ void random_impulse(
     uint32_t* seed_thd,
     float* vx, float* vy, float* vz,
-    float scale, float dt
+    float scale
 ) {
     float r = rand(seed_thd) * 2.0f - 1.0f;
-    scale *= dt;
-    vx[0] += scale * r * r * r * 30.0;
+    vx[0] += scale * r * fabsf(r) * 2.0;
     r = rand(seed_thd) * 2.0f - 1.0f;
-    vy[0] += scale * r * r * r * 22.0;
+    vy[0] += scale * r * fabsf(r) * 2.0;
     r = rand(seed_thd) * 2.0f - 1.0f;
-    vz[0] += scale * r * r * r * 22.0;
+    vz[0] += scale * r * fabsf(r) * 2.0;
 }
 
 
@@ -58,7 +83,7 @@ __device__ void attract_to_assigned_line(
     int32_t line_idx,
     const float* lines,
     float scale,
-    float dt, uint32_t* seed_thd
+    uint32_t* seed_thd
 ) {
     const uint32_t l9 = ((uint32_t)line_idx) * 9u;
     // point a and b are the endpoints of the segment
@@ -83,42 +108,11 @@ __device__ void attract_to_assigned_line(
     const float qz = az + t * d_z + 14.0f; // line is a bit above the page
 
     // attraction toward the projection
-    scale *= dt;
     vx[0] += scale * (qx - px);
     vy[0] += scale * (qy - py);
     vz[0] += scale * (qz - pz);
 }
 
-
-__device__ void perturbation_from_normal_vector(
-    float px, float py, float pz,
-    float* vx, float* vy, float* vz,
-    int32_t line_idx,
-    const float* lines,
-    float upwards_mul, float dt,
-    uint32_t* seed_thd
-) {
-    const float nx = lines[line_idx * 9u + 6];
-    const float ny = lines[line_idx * 9u + 7];
-    const float nz = lines[line_idx * 9u + 8];
-
-    float intensity = upwards_mul * dt;
-    if(intensity < 0.01f) {return;}
-
-    float r = rand(seed_thd);
-    r *= r * 1.2f;
-    r *= rand(seed_thd);
-    r *= r * 1.2f;
-    r *= rand(seed_thd);
-    r *= r * 1.2f;
-    r *= 0.02f;
-
-
-    vx[0] += intensity * r * nx;
-    vy[0] += intensity * r * ny;
-    vz[0] += intensity * r * nz;
-
-}
 
 extern "C" __global__ void points_mode_motion(
     float*         __restrict__ positions,
@@ -157,136 +151,21 @@ extern "C" __global__ void points_mode_motion(
     // random perturbation
     uint32_t seed_thd = generate_unique_seed_fast(seed_global, i);
     random_impulse(&seed_thd, &vx, &vy, &vz, 
-        NOISE_INTENSITY * point_mods[i * 5u + 1], dt);
+        NOISE_INTENSITY * point_mods[i * 5u + 1]);
 
     // attraction to assigned line
     attract_to_assigned_line(px_nest, py_nest, pz_nest, &vx, &vy, &vz,
         lines_idx[i], lines, 
-        ATTRACTION_MULTIPLIER * point_mods[i * 5u + 0], dt, &seed_thd);
+        ATTRACTION_MULTIPLIER * point_mods[i * 5u + 0], &seed_thd);
 
     // normal vector can perturbate in that direction
     perturbation_from_normal_vector(px_nest, py_nest, pz_nest, &vx, &vy, &vz,
-        lines_idx[i], lines, point_mods[i * 5u + 4], dt, &seed_thd);
+        lines_idx[i], lines, point_mods[i * 5u + 4], &seed_thd);
 
     // ...
 
     
     
-
-    /*
-    // Per-point modulation: [spring, jitter, dt, damping, upwards]
-    
-
-    const float k_a     = attraction_multiplier * spring_mul;
-    const float k_d     = momentum             * damping_mul;
-    const float dt_i    = dt          * dt_mul;
-    const float noise_i = noise_sigma * jitter_mul;
-
-    // Load assigned line endpoints and normal vector (stride 9: [ax,ay,az, bx,by,bz, nx,ny,nz])
-    const int32_t li = line_idx[i];
-    const uint32_t l9 = ((uint32_t)li) * 9u;
-    const float ax = lines[l9 + 0];
-    const float ay = lines[l9 + 1];
-    const float az = lines[l9 + 2];
-    const float bx = lines[l9 + 3];
-    const float by = lines[l9 + 4];
-    const float bz = lines[l9 + 5];
-    const float nx = lines[l9 + 6];
-    const float ny = lines[l9 + 7];
-    const float nz = lines[l9 + 8];
-
-    // Predicted next position (used for projection target + endpoint pick)
-    const float nestrov_mul = 0.2f; 
-    const float px_next = px + vx * dt_i * nestrov_mul;
-    const float py_next = py + vy * dt_i * nestrov_mul;
-    const float pz_next = pz + vz * dt_i * nestrov_mul;
-
-    // Direction of the segment
-    const float dx   = bx - ax;
-    const float dy   = by - ay;
-    const float dz   = bz - az;
-    const float len2 = dx * dx + dy * dy + dz * dz + 1e-12f;
-
-    // Orthogonal projection onto the segment, clamped to [0, 1]
-    float t = ((px_next - ax) * dx + (py_next - ay) * dy + (pz_next - az) * dz) / len2;
-    t = fminf(fmaxf(t, 0.0f), 1.0f);
-    const float qx = ax + t * dx;
-    const float qy = ay + t * dy;
-    const float qz = az + t * dz;
-
-    // Pick the endpoint closer to p_next (squared distance)
-    const float dax = ax - px_next;
-    const float day = ay - py_next;
-    const float daz = az - pz_next;
-    const float dbx = bx - px_next;
-    const float dby = by - py_next;
-    const float dbz = bz - pz_next;
-    const float dA2 = dax * dax + day * day + daz * daz;
-    const float dB2 = dbx * dbx + dby * dby + dbz * dbz;
-    const float qEndx = (dA2 <= dB2) ? ax : bx;
-    const float qEndy = (dA2 <= dB2) ? ay : by;
-    const float qEndz = (dA2 <= dB2) ? az : bz;
-
-
-    // Attraction acceleration toward the projection + endpoint bias
-    float acc_x = k_a * ((qx - px_next) + endpointedness * (qEndx - px_next));
-    float acc_y = k_a * ((qy - py_next) + endpointedness * (qEndy - py_next));
-    float acc_z = k_a * ((qz - pz_next) + endpointedness * (qEndz - pz_next));
-
-    // Upwards interaction: attraction toward projection of CURRENT position,
-    // intensity |upwards_mul| / r^2, conditional on sign(dot(p-q, normal)).
-    if (upwards_mul != 0.0f) {
-        // Projection of current (non-Nesterov) position onto the segment
-        float t_cur = ((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / len2;
-        t_cur = fminf(fmaxf(t_cur, 0.0f), 1.0f);
-        const float qx_cur = ax + t_cur * dx;
-        const float qy_cur = ay + t_cur * dy;
-        const float qz_cur = az + t_cur * dz;
-
-        const float dvx = px - qx_cur;
-        const float dvy = py - qy_cur;
-        const float dvz = pz - qz_cur;
-        const float d2_cur = dvx * dvx + dvy * dvy + dvz * dvz + 1e-12f;
-        const float dot_n  = dvx * nx + dvy * ny + dvz * nz;
-
-        if ((upwards_mul > 0.0f && dot_n > 0.0f) || (upwards_mul < 0.0f && dot_n < 0.0f)) {
-            // scale = |upwards_mul| / r^2 * (1/r) = |upwards_mul| / r^3
-            // direction toward projection = -d_vec / r, so acc = scale * (-d_vec)
-            const float abs_mul = fabsf(upwards_mul) ;//    * (8.0f * dot_n * dot_n);
-            float scale   = abs_mul * rsqrtf(d2_cur) / d2_cur;
-
-            scale /= (d2_cur + 1e-8f);
-
-            acc_x += scale * (-dvx);
-            acc_y += scale * (-dvy);
-            acc_z += scale * (-dvz);
-        }
-    }
-
-    // Per-step jitter (per-thread RNG seeded by tid XOR seed)
-    uint32_t seed = generate_unique_seed_fast(seed_global, i);
-    acc_x += (rand(&seed) * 2.0f - 1.0f) * noise_i;
-    acc_y += (rand(&seed) * 2.0f - 1.0f) * noise_i;
-    acc_z += (rand(&seed) * 2.0f - 1.0f) * noise_i;
-
-    // Damped semi-implicit Euler integration
-    float damp = 1.0f - k_d * dt_i;
-    if (damp < 0.0f) damp = 0.0f;
-    vx = vx * damp + acc_x * dt_i;
-    vy = vy * damp + acc_y * dt_i;
-    vz = vz * damp + acc_z * dt_i;
-    */
-
-    /* float norm2_v = vx * vx + vy * vy + vz * vz; 
-    float threshold = 10.0f;
-    if(norm2_v > threshold){
-        float norm_v = sqrtf(norm2_v);
-        vx *= 0.6f;
-        vy *= 0.6f;
-        vz *= 0.6f;
-    } */
-
-
     positions[p3 + 0]  = px + vx * dt;
     positions[p3 + 1]  = py + vy * dt;
     positions[p3 + 2]  = pz + vz * dt;

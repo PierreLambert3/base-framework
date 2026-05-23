@@ -113,15 +113,13 @@ class Page(_GraphicalElement):
         tr = ( hw,  hh, 0)
         tl = (-hw,  hh, 0)
         segments = [(bl, br), (br, tr), (tr, tl), (tl, bl)]
-        from GUI.engine.frontend.theme import transparent, PINK_ELECTRIC, BLUE_WIERDNESS, AMBER2, ORANGE_DARK, AMBER, BONE, ORANGE_YELLOW
-        # self.add_lines(segments, 
-        #                pointMode_n_points_mul = 2.0, 
-        #                pointMode_colour_range=(BLUE_WIERDNESS, PINK_ELECTRIC), 
-        #                pointMode_line_upwards_interaction=(-0.0, 0.0))
+        from GUI.engine.frontend.theme import transparent, darken, PINK_ELECTRIC, BLUE_WIERDNESS, AMBER2, ORANGE_DARK, AMBER, BONE, ORANGE_YELLOW
         self.add_lines(segments, pointMode_n_points_mul = 5.0, 
-                       pointMode_colour_range=(transparent(ORANGE_DARK, 0.8), transparent(ORANGE_YELLOW, 0.6)),
-                       pointMode_spring_strength=(12.0, 2.0),
-                       pointMode_line_upwards_interaction=(20.0, 0.2),
+                       pointMode_colour_range=(transparent(darken(ORANGE_DARK, 0.1), 0.2), transparent(darken(AMBER2, 0.1), 0.2)),
+                       pointMode_spring_strength=(8.0, 0.01),
+                       pointMode_jitter_strength=(0.3, 0.01),
+                       pointMode_line_upwards_interaction=(2.0, 1.6),
+                       pointMode_dt=(0.1, 0.05),
                        invert_lookat=True)
 
     def _ensure_points_mode(self):
@@ -157,7 +155,7 @@ class Page(_GraphicalElement):
             now = time.time()
             dt = 0.001 if self._last_tick_time is None else (now - self._last_tick_time)
 
-            threshold = 0.02
+            threshold = 0.03
             if dt < threshold:
                 return
 

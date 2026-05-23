@@ -1,10 +1,11 @@
+import pygfx
+import numpy as np
 from GUI.engine.frontend.graphical_elements.graphical_element import Element_2d, Container
 from GUI.engine.frontend.graphical_elements.parallelepiped import Parallelepiped
 from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, darken, PINK_NEON, BONE, PINK_ELECTRIC, ORANGE_RED, DARK_HIGHLIGHT
 from GUI.engine.frontend import theme as _theme
 from GUI.engine.frontend.audio import play_hover_in, play_hover_out
-import pygfx
-import numpy as np
+from GUI.engine.frontend import theme as _theme
 
 
 BLACK = "#000000"
@@ -44,8 +45,8 @@ class ButtonColourScheme:
         if hovered is not None:
             self.hovered_border, self.hovered_text, self.hovered_bg = hovered
         else:
-            self.hovered_border = brighten(interpolate_color(colour, BONE, 0.5), 0.05)
-            self.hovered_text   = brighten(interpolate_color(colour, BONE, 0.5), 0.05)
+            self.hovered_border = brighten(interpolate_color(colour, BONE, 0.2), 0.02)
+            self.hovered_text   = brighten(interpolate_color(colour, BONE, 0.2), 0.02)
             self.hovered_bg     = background_colour
 
         # -- clicking (mouse-down, before release) -----------------------------
@@ -54,7 +55,7 @@ class ButtonColourScheme:
         else:
             self.clicking_border = background_colour
             self.clicking_text   = background_colour
-            self.clicking_bg     = brighten(interpolate_color(colour, BONE, 0.2), 0.2)
+            self.clicking_bg     = brighten(darken(colour, 0.3), 0.1)
 
         # -- unclickable -------------------------------------------------------
         if unclickable is not None:
@@ -137,12 +138,15 @@ class Button_2d(Element_2d):
         if not clickable:
             self.hovered = False
             self._apply_style(self.colours.unclickable_border, self.colours.unclickable_text, self.colours.unclickable_bg)
+            self._pm_state_changed("unclickable")
         else:
             # Restore to the correct resting state
             if self.toggleable and self.pressed:
                 self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
+                self._pm_state_changed("active")
             else:
                 self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
+                self._pm_state_changed("base")
 
     def _apply_style(self, border_colour, text_colour, bg_colour=None):
         self.set_lines_colour(border_colour)
@@ -168,7 +172,10 @@ class Button_2d(Element_2d):
         tl = (-hw,  hh, 0)
         
         segments = [(bl, br), (br, tr), (tr, tl), (tl, bl)]
-        self.add_lines(segments, colour=self.colour, thickness=thickness)
+        self.add_lines(segments, colour=self.colour, thickness=thickness, 
+                       pointMode_n_points_mul=2.0,
+                       pointMode_colour_range=(_theme.transparent(self.colour, 0.3), self.colour))
+            
     
     def _make_text(self, bold=False):
         self.text_obj = pygfx.Text(
@@ -208,6 +215,7 @@ class Button_2d(Element_2d):
             self._apply_style(active_hovered_border, active_hovered_text, active_hovered_bg)
         else:
             self._apply_style(self.colours.hovered_border, self.colours.hovered_text, self.colours.hovered_bg)
+        self._pm_state_changed("hovered")
         super().on_pointer_move_inside(event, page_coords)
 
     def on_pointer_move_outside(self, event, page_coords):
@@ -218,14 +226,17 @@ class Button_2d(Element_2d):
         self.hovered = False
         if self.toggleable and self.pressed:
             self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
+            self._pm_state_changed("active")
         else:
             self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
+            self._pm_state_changed("base")
         super().on_pointer_move_outside(event, page_coords)
 
     def on_pointer_down_inside(self, event, page_coords):
         if not self.clickable:
             return
         self._apply_style(self.colours.clicking_border, self.colours.clicking_text, self.colours.clicking_bg)
+        self._pm_state_changed("clicking")
         super().on_pointer_down_inside(event, page_coords)
 
     def on_pointer_up_inside(self, event, page_coords):
@@ -242,22 +253,28 @@ class Button_2d(Element_2d):
         self.pressed = pressed_state
         if not self.clickable:
             self._apply_style(self.colours.unclickable_border, self.colours.unclickable_text, self.colours.unclickable_bg)
+            self._pm_state_changed("unclickable")
         elif self.pressed:
             self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
+            self._pm_state_changed("active")
         else:
             self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
+            self._pm_state_changed("base")
 
     def stop_pointer_down_effect(self):
         if not self.clickable:
             return
         if self.toggleable and self.pressed:
             self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
+            self._pm_state_changed("active")
             return
 
         if self.hovered:
             self._apply_style(self.colours.hovered_border, self.colours.hovered_text, self.colours.hovered_bg)
+            self._pm_state_changed("hovered")
         else:
             self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
+            self._pm_state_changed("base")
 
     def reset_colours(self):
         """Reset to the appropriate resting state (respects clickable & pressed)."""
@@ -267,6 +284,30 @@ class Button_2d(Element_2d):
             self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
         else:
             self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
+
+    # -- points-mode modulation ------------------------------------------------
+
+    def _pm_state_changed(self, state: str):
+        """Apply temporary per-point mod overrides that match the current visual
+        state of the button.  No-op when POINTS_MODE is disabled or the button
+        owns no points-mode line handles.
+
+        Supported states:
+          ``"hovered"``  / ``"clicking"`` – boost upwards interaction.
+          ``"base"``     / ``"active"``   / ``"unclickable"`` – restore to
+          the spec that was registered with the line.
+        """
+        if not _theme.POINTS_MODE or not self._points_mode_handles:
+            return
+        if state in ("hovered", "clicking"):
+            for handle in self._points_mode_handles:
+                handle.set_point_mods(line_upwards_interaction=(15.0, 0.1),
+                                       jitter_strength=(3.0, 0.5),
+                                       spring_strength=(6.0, 1.0),
+                                    colour_range=(_theme.transparent(_theme.brighten(self.colour, 0.1), 0.2), _theme.brighten(self.colour, 0.1)))
+        else:  # "base", "active", "unclickable"
+            for handle in self._points_mode_handles:
+                handle.restore_mod("line_upwards_interaction", "jitter_strength", "colour_range", "spring_strength")
 
 
 class Toggle_2d(Container):

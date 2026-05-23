@@ -28,7 +28,7 @@ from GUI.engine.frontend.theme import (
 from cuda_wrapper.helpers import generate_uint32_seed, next_seed_uint32
 
 
-POINTS_PER_0_1_OF_DIAGONAL = 18
+POINTS_PER_0_1_OF_DIAGONAL = 28
 MIN_POINTS_PER_LINE        = 1
 
 POINT_SIZE_PX              = 1
@@ -99,12 +99,13 @@ class LinesHandle:
     cache `entries` snapshots.
     """
 
-    __slots__ = ("_manager", "entries", "_alive")
+    __slots__ = ("_manager", "entries", "_alive", "_base_mods_spec")
 
     def __init__(self, manager: "PointsModeManager"):
-        self._manager = manager
-        self.entries  = []
-        self._alive   = True
+        self._manager       = manager
+        self.entries        = []
+        self._alive         = True
+        self._base_mods_spec = None
 
     @property
     def alive(self) -> bool:
@@ -156,6 +157,20 @@ class LinesHandle:
             colour_range=colour_range,
             line_upwards_interaction=line_upwards_interaction,
         )
+
+    def restore_mod(self, *col_names: str):
+        """Restore one or more per-point modulation columns to their base spec.
+
+        Each `col_name` must be a keyword accepted by `set_point_mods`
+        (e.g. ``"line_upwards_interaction"``, ``"jitter_strength"``,
+        ``"colour_range"``).  All columns are restored in a single GPU upload.
+        Values are re-sampled from the (mu, std) spec recorded at registration,
+        so for std=0 (typical button case) the restore is exact.
+        """
+        if not self._alive or self._base_mods_spec is None:
+            return
+        kwargs = {name: self._base_mods_spec[name] for name in col_names}
+        self.set_point_mods(**kwargs)
 
     def change_up_vector(self, i: int, new_looking_at):
         """Update the up-normal vector for segment i.
@@ -250,6 +265,7 @@ class PointsModeManager:
         rgba   = _to_rgba(colour)
         mods   = _resolve_point_mods(point_mods)
         handle = LinesHandle(self)
+        handle._base_mods_spec = mods
         for idx, (s, e) in enumerate(pairs):
             up = line_up_vectors[idx] if (line_up_vectors is not None and idx < len(line_up_vectors)) else (0.5, 0.5, 0.0)
             self._append_segment(handle, s, e, rgba, mods, up_vec=up)
@@ -264,8 +280,8 @@ class PointsModeManager:
         # 1. move the points (GPU) 
         # 2. GPU -> CPU copy of positions
 
-        # dt = min(dt / max_dt, 1.0)
-        dt = 0.24
+        # dt = min(dt / max_dt, 1.0) * 0.1
+        dt = 0.2
 
         self.cuda_seed = next_seed_uint32(self.cuda_seed)
         self._kernel.launch(
@@ -418,7 +434,8 @@ class PointsModeManager:
             self._lines_gpu.copy_from(np.ascontiguousarray(self._lines_xyzxyz))
 
     def _update_line_normal(self, line_index: int, up_vec):
-        """Write the up-normal vector (cols 6-8) for a registered line and upload to GPU."""
+        """Normalises the up vector and Writes it (cols 6-8) for a registered line and upload to GPU."""
+        up_vec = up_vec / (np.linalg.norm(up_vec) + 1e-12)
         self._lines_xyzxyz[line_index, 6:] = (float(up_vec[0]), float(up_vec[1]), float(up_vec[2]))
         if self._lines_gpu is not None:
             self._lines_gpu.copy_from(np.ascontiguousarray(self._lines_xyzxyz))
