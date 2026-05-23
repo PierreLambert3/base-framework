@@ -278,8 +278,6 @@ class Custom_Frontend(Front_End):
         
         self.counter_to_1000 = (self.counter_to_1000 + 1) % 1000
         
-        # fps_update_every = 6
-        # update_fps = FRAME_TIMER and (self.counter_to_1000 % fps_update_every) == 0
         fps_alpha = 0.5
         if FRAME_TIMER:
             start_time = time.time()
@@ -302,7 +300,6 @@ class Custom_Frontend(Front_End):
 
             FPS_total       = 1.0 / (self.EMA_frame_time + self.EMA_time_slept + 1e-9)
             pct_time_active = 100.0 * self.EMA_frame_time / (self.EMA_frame_time + self.EMA_time_slept + 1e-9)
-            print(f"--- frontend: work/sleep percentage {pct_time_active:.1f}%, FPS {FPS_total:.1f} ---")
             if self.overlay is not None:
                 self.overlay.update_perf_stats(pct_time_active, FPS_total)
                 

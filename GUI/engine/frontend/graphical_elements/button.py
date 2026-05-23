@@ -45,7 +45,7 @@ class ButtonColourScheme:
         if hovered is not None:
             self.hovered_border, self.hovered_text, self.hovered_bg = hovered
         else:
-            self.hovered_border = brighten(interpolate_color(colour, BONE, 0.2), 0.02)
+            self.hovered_border = brighten(interpolate_color(colour, BONE, 0.9), 0.02)
             self.hovered_text   = brighten(interpolate_color(colour, BONE, 0.2), 0.02)
             self.hovered_bg     = background_colour
 
@@ -87,8 +87,8 @@ class Button_2d(Element_2d):
                  colour=None, text_colour=ORANGE_YELLOW, font_size=24,
                  background_colour=BLACK,
                  pointer_move_inside_callback=None, pointer_click_callback=None,
-                 toggleable=False, clickable=True, colour_scheme=None, bold=False):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour)
+                 toggleable=False, clickable=True, colour_scheme=None, bold=False, ignore_pointmode=False):
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, ignore_pointmode=ignore_pointmode)
         self.text = text
         self.text_colour = text_colour
         self.font_size = font_size
@@ -207,6 +207,7 @@ class Button_2d(Element_2d):
         if not self.hovered:  # Only play sound on first hover-in
             play_hover_in()
         self.hovered = True
+        self._pm_state_changed("hovered")
         if self.toggleable and self.pressed:
             # Swap text ↔ background (same logic as non-active hover)
             active_hovered_border = self.colours.active_bg
@@ -215,7 +216,6 @@ class Button_2d(Element_2d):
             self._apply_style(active_hovered_border, active_hovered_text, active_hovered_bg)
         else:
             self._apply_style(self.colours.hovered_border, self.colours.hovered_text, self.colours.hovered_bg)
-        self._pm_state_changed("hovered")
         super().on_pointer_move_inside(event, page_coords)
 
     def on_pointer_move_outside(self, event, page_coords):
@@ -225,18 +225,18 @@ class Button_2d(Element_2d):
             play_hover_out()
         self.hovered = False
         if self.toggleable and self.pressed:
-            self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
             self._pm_state_changed("active")
+            self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
         else:
-            self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
             self._pm_state_changed("base")
+            self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
         super().on_pointer_move_outside(event, page_coords)
 
     def on_pointer_down_inside(self, event, page_coords):
         if not self.clickable:
             return
-        self._apply_style(self.colours.clicking_border, self.colours.clicking_text, self.colours.clicking_bg)
         self._pm_state_changed("clicking")
+        self._apply_style(self.colours.clicking_border, self.colours.clicking_text, self.colours.clicking_bg)
         super().on_pointer_down_inside(event, page_coords)
 
     def on_pointer_up_inside(self, event, page_coords):
@@ -252,29 +252,29 @@ class Button_2d(Element_2d):
     def set_pressed(self, pressed_state):
         self.pressed = pressed_state
         if not self.clickable:
-            self._apply_style(self.colours.unclickable_border, self.colours.unclickable_text, self.colours.unclickable_bg)
             self._pm_state_changed("unclickable")
+            self._apply_style(self.colours.unclickable_border, self.colours.unclickable_text, self.colours.unclickable_bg)
         elif self.pressed:
-            self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
             self._pm_state_changed("active")
+            self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
         else:
-            self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
             self._pm_state_changed("base")
+            self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
 
     def stop_pointer_down_effect(self):
         if not self.clickable:
             return
         if self.toggleable and self.pressed:
-            self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
             self._pm_state_changed("active")
+            self._apply_style(self.colours.active_border, self.colours.active_text, self.colours.active_bg)
             return
 
         if self.hovered:
-            self._apply_style(self.colours.hovered_border, self.colours.hovered_text, self.colours.hovered_bg)
             self._pm_state_changed("hovered")
+            self._apply_style(self.colours.hovered_border, self.colours.hovered_text, self.colours.hovered_bg)
         else:
-            self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
             self._pm_state_changed("base")
+            self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
 
     def reset_colours(self):
         """Reset to the appropriate resting state (respects clickable & pressed)."""
@@ -301,13 +301,20 @@ class Button_2d(Element_2d):
             return
         if state in ("hovered", "clicking"):
             for handle in self._points_mode_handles:
-                handle.set_point_mods(line_upwards_interaction=(15.0, 0.1),
-                                       jitter_strength=(3.0, 0.5),
-                                       spring_strength=(6.0, 1.0),
+                handle.set_point_mods(line_upwards_interaction=(80.0, 0.1),
+                                    jitter_strength=(10.0, 1.5),
+                                    spring_strength=(1.6, 0.7),
+                                    dt = (0.03, 0.01),
                                     colour_range=(_theme.transparent(_theme.brighten(self.colour, 0.1), 0.2), _theme.brighten(self.colour, 0.1)))
+        elif state in ("active"):
+            for handle in self._points_mode_handles:
+                handle.set_point_mods(jitter_strength=(8.0, 1.0),
+                                      spring_strength=(1.0, 0.1),
+                                    dt = (0.07, 0.01),
+                                    colour_range=(_theme.transparent(_theme.brighten(self.colour, 0.3), 0.1), _theme.brighten(self.colour, 0.5)))
         else:  # "base", "active", "unclickable"
             for handle in self._points_mode_handles:
-                handle.restore_mod("line_upwards_interaction", "jitter_strength", "colour_range", "spring_strength")
+                handle.restore_mod("line_upwards_interaction", "dt","jitter_strength", "colour_range", "spring_strength")
 
 
 class Toggle_2d(Container):
@@ -321,8 +328,8 @@ class Toggle_2d(Container):
                  colour=None, text_colour=ORANGE_YELLOW, font_size=24,
                  background_colour=BLACK,
                  initial_value=0, pointer_toggle_callback=None,
-                 colour_scheme=None, bold=False, clickable=True):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour)
+                 colour_scheme=None, bold=False, clickable=True, ignore_pointmode=False):
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, ignore_pointmode=ignore_pointmode)
         self.value = initial_value
         self._texts = (text_left, text_right)
         self._toggle_callback = pointer_toggle_callback
@@ -330,7 +337,7 @@ class Toggle_2d(Container):
 
         shared = dict(colour=colour, text_colour=text_colour, font_size=font_size,
                       background_colour=background_colour, toggleable=True,
-                      colour_scheme=colour_scheme, bold=bold, clickable=clickable)
+                      colour_scheme=colour_scheme, bold=bold, clickable=clickable, ignore_pointmode=ignore_pointmode)
 
         margin = 0.01  # horizontal gap between the two buttons (relative to toggle width)
         half = (1.0 - margin) / 2.0

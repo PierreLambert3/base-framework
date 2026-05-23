@@ -49,8 +49,8 @@ class Scatterplot3DDynamic(Element_3d):
     def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px,
                  initial_capacity=20_000, growth_factor=1.2, 
                  point_size=2, default_colour=(1, 0, 0.1, 1),
-                 colour_mode="uniform"):
-        super().__init__(unique_name, parent, bl_xyz_px, size_xyz_px)
+                 colour_mode="uniform", ignore_pointmode=False):
+        super().__init__(unique_name, parent, bl_xyz_px, size_xyz_px, ignore_pointmode=ignore_pointmode)
         
         self.initial_capacity = initial_capacity
         self.growth_factor = growth_factor
@@ -418,8 +418,8 @@ class Scatterplot3DDynamicMultiSeries(Element_3d):
     
     def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px,
                  series_colours, initial_capacity_per_series=5_000,
-                 growth_factor=2.0, point_size=2):
-        super().__init__(unique_name, parent, bl_xyz_px, size_xyz_px)
+                 growth_factor=2.0, point_size=2, ignore_pointmode=False):
+        super().__init__(unique_name, parent, bl_xyz_px, size_xyz_px, ignore_pointmode=ignore_pointmode)
         
         self.series_colours = series_colours
         self.n_series = len(series_colours)

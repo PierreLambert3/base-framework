@@ -138,6 +138,8 @@ class WorkerInstance:
         self.add_listener(prefix + "set simulation chunk size", self._set_simulation_chunk_size)
         self.add_listener(prefix + "frontend ready",            self._handle_frontend_ready)
         self.add_listener(prefix + "exit program",              self.exit_program)
+        self.add_listener(prefix + "instance selected",         self._handle_instance_selected)
+        self.add_listener(prefix + "instance deselected",       self._handle_instance_deselected)
 
     def exit_program(self, data):
         self._on_exit(data)
@@ -180,3 +182,11 @@ class WorkerInstance:
 
     def _handle_frontend_ready(self, data):
         self.frontend_ready_for_simulation = True
+
+    def _handle_instance_selected(self, data):
+        self.selected_by_frontend = True
+        self._on_instance_selected()
+
+    def _handle_instance_deselected(self, data):
+        self.selected_by_frontend = False
+        self._on_instance_deselected()

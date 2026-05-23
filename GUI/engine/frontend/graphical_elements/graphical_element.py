@@ -10,13 +10,14 @@ from pylinalg import quat_from_axis_angle, quat_from_euler, quat_mul
 from GUI.engine.frontend.theme import ORANGE_RED, ORANGE_YELLOW, ORANGE_DARK, interpolate_color
 
 class _GraphicalElement:
-    def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None, background_colour=None, background_opacity=1.0):
+    def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None, background_colour=None, background_opacity=1.0, ignore_pointmode=False):
         self.name         = unique_name
         self.parent       = parent
         self.pos_xyz      = center_xyz_px
         self.size_xyz     = size_xyz_px
         self.is_leaf      = True
         self.colour       = colour if colour is not None else interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5)
+        self.ignore_pointmode = ignore_pointmode
         self._rotation    = (0, 0, 0, 1)  # quaternion (x, y, z, w) - identity rotation
         self._gfx_objects = []  # list of pygfx objects that need rotation applied
         self.pagewise_xy  = self._make_page_coordinates()
@@ -113,12 +114,16 @@ class _GraphicalElement:
             self.hidden = True
             for gfx_obj in self._gfx_objects:
                 gfx_obj.visible = False
+            for h in self._points_mode_handles:
+                h.hide()
     
     def show(self):
         if self.hidden:
             self.hidden = False
             for gfx_obj in self._gfx_objects:
                 gfx_obj.visible = True
+            for h in self._points_mode_handles:
+                h.show()
     
     def rotate(self, angles_rad, order="xyz"):
         """
@@ -218,7 +223,7 @@ class _GraphicalElement:
         if colour is None:
             colour = self.colour
 
-        if _theme.POINTS_MODE:
+        if _theme.POINTS_MODE and not self.ignore_pointmode:
             # Default colour range only kicks in if the caller did not
             # explicitly pass one AND did not override `colour`.
             colour_range = pointMode_colour_range
@@ -438,10 +443,10 @@ class _GraphicalElement:
         particles.leave_element()
 
 class Element_2d(_GraphicalElement):
-    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, colour=None, background_colour=None): # pos_xy_rel: bottom-left corner
+    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, colour=None, background_colour=None, ignore_pointmode=False): # pos_xy_rel: bottom-left corner
         size_xyz_px  = (size_xy_rel[0]*parent.size[0], size_xy_rel[1]*parent.size[1], 0)
         center_px    = (parent.bl[0] + bl_xy_rel[0]*parent.size[0] + size_xyz_px[0]/2, parent.bl[1] + bl_xy_rel[1]*parent.size[1] + size_xyz_px[1]/2, parent.bl[2])
-        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour, background_colour=background_colour)
+        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour, background_colour=background_colour, ignore_pointmode=ignore_pointmode)
 
     def _make_borders(self, borders, thickness=1.0):
         if sum(borders) == 0:
@@ -465,19 +470,19 @@ class Element_2d(_GraphicalElement):
         self.add_lines(segments, colour=border_colour, thickness=thickness)
 
 class Element_3d(_GraphicalElement):
-    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, colour=None):
+    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, colour=None, ignore_pointmode=False):
         center_px = (bl_xyz_px[0] + size_xyz_px[0]/2, bl_xyz_px[1] + size_xyz_px[1]/2, bl_xyz_px[2] + size_xyz_px[2]/2)
-        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour)
+        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour, ignore_pointmode=ignore_pointmode)
 
 class Container(Element_2d):
-    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, borders = (0, 0, 0, 0), colour=None, background_colour=None):
+    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, borders = (0, 0, 0, 0), colour=None, background_colour=None, ignore_pointmode=False):
         # borders: (top, right, bottom, left) "0" means no border, "1" means full border
         self.is_container = True
         self.is_leaf  = False
         self.children = []
         self.children_dict = {}
         self.border_flags = borders
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, background_colour=background_colour)
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, background_colour=background_colour, ignore_pointmode=ignore_pointmode)
         self._make_borders(borders)
         self.on_show = None  # user-defined callback when container is shown
     

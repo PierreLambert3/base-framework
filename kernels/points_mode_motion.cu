@@ -32,11 +32,11 @@
 #define MOMENTUM 0.95f
 
 // NESTEROV_COEFF should be the time constant of MOMENTUM, in iterations (time until 1 becomes 1/e)
-#define NESTEROV_COEFF 0.9f
+#define NESTEROV_COEFF 1.9f
 
 
-#define ATTRACTION_MULTIPLIER 0.5f
-#define NOISE_INTENSITY 0.8f
+#define ATTRACTION_MULTIPLIER 0.9f
+#define NOISE_INTENSITY 0.7f
 #define UPAWARDS_INTENSITY 0.005f
 
 

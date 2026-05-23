@@ -51,8 +51,9 @@ class Main_Page(Page):
         self._btn_big = Button_2d(
             page_name + " btn big", toolbar, (0.60, 0.20), (0.30, 0.60),
             text=f"spawn big instance ({BIG_N_POINTS:,} pts)",
-            text_colour=PINK_ELECTRIC, colour=PINK_ELECTRIC,
+            text_colour=AMBER, colour=AMBER,
             pointer_click_callback=self._on_spawn_big_clicked,
+            ignore_pointmode=True
         )
 
         # Grid container holding the scatterplots

@@ -59,8 +59,8 @@ class LinesDynamic(Element_2d):
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel,
                  initial_capacity=10_000, growth_factor=1.5,
                  thickness=1.0, default_colour=(1, 0.5, 0.1, 1),
-                 normalize_coords=False, colour_mode="uniform"):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel)
+                 normalize_coords=False, colour_mode="uniform", ignore_pointmode=False):
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, ignore_pointmode=ignore_pointmode)
         
         self.initial_capacity = initial_capacity
         self.growth_factor = growth_factor
@@ -514,8 +514,8 @@ class LinesDynamicMultiSeries(Element_2d):
     
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel,
                  series_colours, initial_capacity_per_series=5_000,
-                 growth_factor=1.5, thickness=1.0):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel)
+                 growth_factor=1.5, thickness=1.0, ignore_pointmode=False):
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, ignore_pointmode=ignore_pointmode)
         
         self.series_colours = series_colours
         self.n_series = len(series_colours)

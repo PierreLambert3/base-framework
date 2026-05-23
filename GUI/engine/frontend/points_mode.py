@@ -35,6 +35,8 @@ POINT_SIZE_PX              = 1
 
 GROWTH_FACTOR              = 1.2
 
+
+
 # Column indices into the packed (N, 5) per-point modulation array.
 MOD_SPRING  = 0
 MOD_JITTER  = 1
@@ -99,13 +101,14 @@ class LinesHandle:
     cache `entries` snapshots.
     """
 
-    __slots__ = ("_manager", "entries", "_alive", "_base_mods_spec")
+    __slots__ = ("_manager", "entries", "_alive", "_base_mods_spec", "_hidden")
 
     def __init__(self, manager: "PointsModeManager"):
         self._manager       = manager
         self.entries        = []
         self._alive         = True
         self._base_mods_spec = None
+        self._hidden        = False
 
     @property
     def alive(self) -> bool:
@@ -196,6 +199,42 @@ class LinesHandle:
         up_vec = la - mid_world
         self._manager._update_line_normal(line_index, up_vec)
 
+    def hide(self):
+        if self._hidden or not self._alive:
+            return
+        self._hidden = True
+        mgr = self._manager
+        sx, sy, _ = mgr._scatter.size
+        for _, slot_start, slot_count in self.entries:
+            sl = slice(slot_start, slot_start + slot_count)
+            # Set to random location on the page plane, offset in Z
+            
+            mgr._pos_host[sl, 0] = -1200.0
+            mgr._pos_host[sl, 1] = _rng.uniform(-sx/2, sx/2, size=slot_count)
+            mgr._pos_host[sl, 2] = 10.0
+
+            mgr._point_mods[sl, MOD_DT] = 0.0
+        if mgr._positions_gpu is not None:
+            mgr._positions_gpu.copy_from(mgr._pos_host)
+            mgr._mods_gpu.copy_from(np.ascontiguousarray(mgr._point_mods))
+
+    def show(self):
+        if not self._hidden or not self._alive:
+            return
+        self._hidden = False
+        mgr = self._manager
+        for line_idx, slot_start, slot_count in self.entries:
+            sl = slice(slot_start, slot_start + slot_count)
+            mgr._point_mods[sl, MOD_DT] = _sample_mod_column(self._base_mods_spec["dt"], slot_count)
+            row = mgr._lines_xyzxyz[line_idx]
+            ts = np.linspace(0.0, 1.0, slot_count, dtype=np.float32)
+            mgr._pos_host[sl, 0] = row[0] + ts * (row[3] - row[0])
+            mgr._pos_host[sl, 1] = row[1] + ts * (row[4] - row[1])
+            mgr._pos_host[sl, 2] = row[2] + ts * (row[5] - row[2])
+        if mgr._positions_gpu is not None:
+            mgr._positions_gpu.copy_from(mgr._pos_host)
+            mgr._mods_gpu.copy_from(np.ascontiguousarray(mgr._point_mods))
+
     def remove(self):
         if not self._alive:
             return
@@ -281,7 +320,7 @@ class PointsModeManager:
         # 2. GPU -> CPU copy of positions
 
         # dt = min(dt / max_dt, 1.0) * 0.1
-        dt = 0.2
+        dt = 0.4
 
         self.cuda_seed = next_seed_uint32(self.cuda_seed)
         self._kernel.launch(

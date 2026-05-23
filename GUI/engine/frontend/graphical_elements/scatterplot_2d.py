@@ -5,8 +5,8 @@ import pygfx
 import numpy as np
 
 class Scatterplot2D(Element_2d):
-    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel)
+    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, ignore_pointmode=False):
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, ignore_pointmode=ignore_pointmode)
 
         # for now: placeholder size
         self.n = 1_000_000

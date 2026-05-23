@@ -9,12 +9,12 @@ import time
 import numpy as np
 
 class Page(_GraphicalElement):
-    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None, no_border=False):
+    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None, no_border=False, ignore_pointmode=False):
         self.frontend       = frontend
         self._scene         = scene.scene
         self._scene_wrapper = scene
         center_xyz = bl_xyz_px[0] + size_xyz_px[0]/2, bl_xyz_px[1] + size_xyz_px[1]/2, bl_xyz_px[2] + size_xyz_px[2]/2
-        super().__init__(unique_name, None, center_xyz, size_xyz_px, colour=colour)
+        super().__init__(unique_name, None, center_xyz, size_xyz_px, colour=colour, ignore_pointmode=ignore_pointmode)
         self.is_leaf          = False
         self.containers       = []
         self._containers_dict = {}
@@ -116,7 +116,7 @@ class Page(_GraphicalElement):
         from GUI.engine.frontend.theme import transparent, darken, PINK_ELECTRIC, BLUE_WIERDNESS, AMBER2, ORANGE_DARK, AMBER, BONE, ORANGE_YELLOW
         self.add_lines(segments, pointMode_n_points_mul = 5.0, 
                        pointMode_colour_range=(transparent(darken(ORANGE_DARK, 0.1), 0.2), transparent(darken(AMBER2, 0.1), 0.2)),
-                       pointMode_spring_strength=(8.0, 0.01),
+                       pointMode_spring_strength=(3.0, 0.01),
                        pointMode_jitter_strength=(0.3, 0.01),
                        pointMode_line_upwards_interaction=(2.0, 1.6),
                        pointMode_dt=(0.1, 0.05),

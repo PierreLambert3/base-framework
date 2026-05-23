@@ -11,8 +11,8 @@ class Text(Element_2d):
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, text, 
                  colour=None, text_colour=ORANGE_YELLOW, font_size=24,
                  pointer_move_inside_callback=None, pointer_click_callback=None,
-                 toggleable=False):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour)
+                 toggleable=False, ignore_pointmode=False):
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, ignore_pointmode=ignore_pointmode)
         self.text = text
         self.text_colour = text_colour
         self.font_size = font_size
