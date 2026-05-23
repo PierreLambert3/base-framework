@@ -7,7 +7,7 @@
 import pygfx
 import numpy as np
 from pylinalg import quat_from_axis_angle, quat_from_euler, quat_mul
-from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color
+from GUI.engine.frontend.theme import ORANGE_RED, ORANGE_YELLOW, ORANGE_DARK, interpolate_color
 
 class _GraphicalElement:
     def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None, background_colour=None, background_opacity=1.0):
@@ -34,6 +34,8 @@ class _GraphicalElement:
 
         # Particle magnet feature
         self.is_particle_magnet = False
+        self._points_mode_handles = []
+        self._gfx_lines = []
 
         # If parent is a container, register self as its child
         if self.parent is not None and hasattr(self.parent, 'is_container'):
@@ -171,11 +173,143 @@ class _GraphicalElement:
         tr_y = bl_y + self.size[1]
         return (bl_x <= x <= tr_x) and (bl_y <= y <= tr_y)
 
+    def add_lines(self, segments,
+                  colour=None,
+                  thickness=1.0, # only used when not in points mode
+                  pointMode_n_points_mul=1.0,
+                  pointMode_colour_range=(ORANGE_RED, ORANGE_DARK),
+                  pointMode_spring_strength=(1.0, 0.0),
+                  pointMode_jitter_strength=(1.0, 0.0),
+                  pointMode_dt=(1.0, 0.3),
+                  pointMode_damping=(1.0, 0.0),
+                  pointMode_line_upwards_interaction=(0.0, 0.0),
+                  looking_at_locations=None,
+                  invert_lookat=False):
+        """
+        Add line segments to the graphical element.
+        `segments` should be a list of ((x1, y1, z1), (x2, y2, z2)) in local object space.
+
+        When `theme.POINTS_MODE` is set, the `pointMode_*` arguments modulate
+        the swarm of points used to render each line:
+          - `pointMode_n_points_mul`: float, multiplies the auto-computed
+            point count per segment.
+          - `pointMode_colour_range`: pair of colours; per-point colour is
+            sampled as `c1 + (c2 - c1) * U[0,1]**2`. Defaults to
+            (ORANGE_WHITE, PURPLE_DARK) when not provided. Pass an explicit
+            `colour` argument and leave this unset for a uniform colour.
+          - `pointMode_spring_strength` / `_jitter_strength` / `_dt`
+            / `_damping`: `(mu, std)` tuples; one multiplier per point is
+            sampled as `mu + N(0, std)` and multiplies the corresponding
+            global kernel parameter on the GPU.
+          - `pointMode_line_upwards_interaction`: `(mu, std)` tuple for the
+            per-point upwards-interaction scalar. Positive values attract
+            points that are on the normal side of the line toward their
+            projection; negative values do the same for the opposite side.
+            Intensity decays as 1/r². Zero (default) disables the interaction.
+          - `looking_at_locations`: list of one 3D point per segment (in local
+            object space). The up-normal for each line is computed as
+            `looking_at_locations[i] - midpoint(segment[i])`. When omitted
+            (or an empty list), the mean of all segment endpoints is used as a
+            shared look-at target (with a small per-segment noise offset), so
+            e.g. all edges of a rectangle automatically look toward its center.
+          - `invert_lookat`: if True, flip the computed up-normal direction.
+        """
+        from GUI.engine.frontend import theme as _theme
+        if colour is None:
+            colour = self.colour
+
+        if _theme.POINTS_MODE:
+            # Default colour range only kicks in if the caller did not
+            # explicitly pass one AND did not override `colour`.
+            colour_range = pointMode_colour_range
+            if colour_range is None and colour is self.colour:
+                colour_range = (_theme.ORANGE_WHITE, _theme.PURPLE_DARK)
+
+            point_mods = {
+                "n_points_mul":             float(pointMode_n_points_mul),
+                "colour_range":             colour_range,
+                "spring_strength":          pointMode_spring_strength,
+                "jitter_strength":          pointMode_jitter_strength,
+                "dt":                       pointMode_dt,
+                "damping":                  pointMode_damping,
+                "line_upwards_interaction": pointMode_line_upwards_interaction,
+            }
+
+            # Compute per-segment up-normal vectors in local object space.
+            # `looking_at_locations` entries are in the same local space as `segments`.
+            segs = list(segments)
+            n_segs = len(segs)
+            if looking_at_locations and len(looking_at_locations) >= n_segs:
+                look_at_list = [np.asarray(looking_at_locations[k], dtype=np.float32)
+                                for k in range(n_segs)]
+            else:
+                # Default: mean of all endpoints + tiny independent noise per segment.
+                all_pts = np.array([pt for seg in segs for pt in seg], dtype=np.float32)
+                mean_pt = all_pts.mean(axis=0)
+                noise_scale = float(np.linalg.norm(all_pts.max(axis=0) - all_pts.min(axis=0))) * 1e-4
+                noise_scale = max(noise_scale, 1e-6)
+                look_at_list = [
+                    mean_pt + np.random.randn(3).astype(np.float32) * noise_scale for _ in range(n_segs)
+                ]
+
+            line_up_vectors = []
+            for k, (p1, p2) in enumerate(segs):
+                mid = (np.asarray(p1, dtype=np.float32) + np.asarray(p2, dtype=np.float32)) * 0.5
+                if invert_lookat:
+                    line_up_vectors.append(mid - look_at_list[k])
+                else:
+                    line_up_vectors.append(look_at_list[k] - mid)
+
+            cx, cy, cz = self.center
+            abs_segments = []
+            for (p1, p2) in segs:
+                abs_segments.append((
+                    (p1[0] + cx, p1[1] + cy, p1[2] + cz),
+                    (p2[0] + cx, p2[1] + cy, p2[2] + cz),
+                ))
+            pm = self.page._ensure_points_mode()
+            handle = pm.register_lines(abs_segments, colour=colour, point_mods=point_mods,
+                                       line_up_vectors=line_up_vectors)
+            self._points_mode_handles.append(handle)
+        else:
+            positions = []
+            for p1, p2 in segments:
+                positions.append(p1)
+                positions.append(p2)
+            positions = np.array(positions, dtype=np.float32)
+
+            geom = pygfx.Geometry(positions=positions)
+            mat = pygfx.LineSegmentMaterial(color=colour, thickness=thickness, aa=True)
+            line_obj = pygfx.Line(geom, mat)
+            line_obj.local.position = self.center
+            self._gfx_lines.append(line_obj)
+            self.register_gfx_object(line_obj)
+
+    def set_lines_colour(self, colour):
+        from GUI.engine.frontend import theme as _theme
+        if _theme.POINTS_MODE:
+            for handle in self._points_mode_handles:
+                handle.set_colour(colour)
+        else:
+            for line_obj in self._gfx_lines:
+                line_obj.material.color = colour
+
+    def set_lines_thickness(self, thickness):
+        from GUI.engine.frontend import theme as _theme
+        if not _theme.POINTS_MODE:
+            for line_obj in self._gfx_lines:
+                line_obj.material.thickness = thickness
+
     def die(self):
         """
         Destroy this element and remove all its pygfx objects from the scene.
         This properly deallocates GPU resources by removing objects from the scene graph.
         """
+        for handle in self._points_mode_handles:
+            handle.remove()
+        self._points_mode_handles.clear()
+        self._gfx_lines.clear()
+
         # Make a copy of the list since we'll be modifying it during iteration
         gfx_objects_copy = list(self._gfx_objects)
         
@@ -312,39 +446,23 @@ class Element_2d(_GraphicalElement):
     def _make_borders(self, borders, thickness=1.0):
         if sum(borders) == 0:
             return  # no borders to create
-        
+
+        border_colour = interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5)
+
+        # Element-centered corners (relative to self.center).
         hw, hh = self.size[0] / 2, self.size[1] / 2
-        lines = []
-        
-        if borders[0] == 1:  # top
-            two_points = pygfx.Geometry(positions=np.array([
-                [-hw,  hh, 0],
-                [ hw,  hh, 0],
-            ], dtype=np.float32))
-            lines.append(pygfx.Line(two_points, pygfx.LineMaterial(color=interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5), thickness=thickness, aa=True)))
-        if borders[1] == 1:  # right
-            two_points = pygfx.Geometry(positions=np.array([
-                [ hw,  hh, 0],
-                [ hw, -hh, 0],
-            ], dtype=np.float32))
-            lines.append(pygfx.Line(two_points, pygfx.LineMaterial(color=interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5), thickness=thickness, aa=True)))
-        if borders[2] == 1:  # bottom
-            two_points = pygfx.Geometry(positions=np.array([
-                [ hw, -hh, 0],
-                [-hw, -hh, 0],
-            ], dtype=np.float32))
-            lines.append(pygfx.Line(two_points, pygfx.LineMaterial(color=interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5), thickness=thickness, aa=True)))
-        if borders[3] == 1:  # left
-            two_points = pygfx.Geometry(positions=np.array([
-                [-hw, -hh, 0],
-                [-hw,  hh, 0],
-            ], dtype=np.float32))
-            lines.append(pygfx.Line(two_points, pygfx.LineMaterial(color=interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5), thickness=thickness, aa=True)))
-        
-        self.border_lines = lines
-        for line in self.border_lines:
-            line.local.position = self.center
-            self.register_gfx_object(line)
+        top_l = (-hw,  hh, 0)
+        top_r = ( hw,  hh, 0)
+        bot_l = (-hw, -hh, 0)
+        bot_r = ( hw, -hh, 0)
+
+        segments = []
+        if borders[0] == 1: segments.append((top_l, top_r))  # top
+        if borders[1] == 1: segments.append((top_r, bot_r))  # right
+        if borders[2] == 1: segments.append((bot_r, bot_l))  # bottom
+        if borders[3] == 1: segments.append((bot_l, top_l))  # left
+
+        self.add_lines(segments, colour=border_colour, thickness=thickness)
 
 class Element_3d(_GraphicalElement):
     def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, colour=None):

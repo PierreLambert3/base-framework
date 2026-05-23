@@ -3,7 +3,9 @@
 # (recipes for adding pages and subscribing to worker data streams).
 
 from GUI.engine.frontend.graphical_elements.graphical_element import _GraphicalElement
+from GUI.engine.frontend import theme as _theme
 import pygfx
+import time
 import numpy as np
 
 class Page(_GraphicalElement):
@@ -17,9 +19,12 @@ class Page(_GraphicalElement):
         self.containers       = []
         self._containers_dict = {}
 
-        # border
+        # Points-mode manager (lazy: only allocated on first register_line call)
+        self.points_mode      = None
+        self._last_tick_time  = time.time()
+
         if not no_border:
-            self.register_gfx_object(self._generate_border())
+            self._install_border()
 
         # Interaction mesh (to translate pointer coordinates to page coordinates)
         self.register_gfx_object(self._generate_pickable_mesh())
@@ -33,9 +38,6 @@ class Page(_GraphicalElement):
 
         # user-defined callback when page is shown (for instance to hide some elements, or for animations)
         self.on_show             = None
-        
-        # Overlay particles (set by subclass if needed)
-        self.overlay_particles   = None
     
     def manage_mouse_pointer_move(self, event, page_coords):
         # elements hit by the pointer
@@ -104,26 +106,30 @@ class Page(_GraphicalElement):
         self.pick_mesh = pick_mesh
         return pick_mesh
 
-    def _generate_border(self):
-        from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color
-        # Get bottom-left corner and size
-        bl = self.bottom_left
-        w, h = self.size[0], self.size[1]
-        z = bl[2]
-        
-        # Define 4 corners: bottom-left, bottom-right, top-right, top-left, back to bottom-left
-        positions = np.array([
-            [bl[0],     bl[1],     z],  # bottom-left
-            [bl[0] + w, bl[1],     z],  # bottom-right
-            [bl[0] + w, bl[1] + h, z],  # top-right
-            [bl[0],     bl[1] + h, z],  # top-left
-            [bl[0],     bl[1],     z],  # back to bottom-left (close the loop)
-        ], dtype=np.float32)
-        
-        geom = pygfx.Geometry(positions=positions)
-        mat  = pygfx.LineMaterial(color=self.colour, thickness=1.0, aa=True)
-        self.border_line = pygfx.Line(geom, mat)
-        return self.border_line
+    def _install_border(self):
+        hw, hh = self.size[0] / 2, self.size[1] / 2
+        bl = (-hw, -hh, 0)
+        br = ( hw, -hh, 0)
+        tr = ( hw,  hh, 0)
+        tl = (-hw,  hh, 0)
+        segments = [(bl, br), (br, tr), (tr, tl), (tl, bl)]
+        from GUI.engine.frontend.theme import transparent, PINK_ELECTRIC, BLUE_WIERDNESS, AMBER2, ORANGE_DARK, AMBER, BONE, ORANGE_YELLOW
+        # self.add_lines(segments, 
+        #                pointMode_n_points_mul = 2.0, 
+        #                pointMode_colour_range=(BLUE_WIERDNESS, PINK_ELECTRIC), 
+        #                pointMode_line_upwards_interaction=(-0.0, 0.0))
+        self.add_lines(segments, pointMode_n_points_mul = 5.0, 
+                       pointMode_colour_range=(transparent(ORANGE_DARK, 0.8), transparent(ORANGE_YELLOW, 0.6)),
+                       pointMode_spring_strength=(12.0, 2.0),
+                       pointMode_line_upwards_interaction=(20.0, 0.2),
+                       invert_lookat=True)
+
+    def _ensure_points_mode(self):
+        """Lazily create this page's PointsModeManager."""
+        if self.points_mode is None:
+            from GUI.engine.frontend.points_mode import PointsModeManager
+            self.points_mode = PointsModeManager(self)
+        return self.points_mode
     
     def hide(self):
         for child in self.containers:
@@ -147,14 +153,18 @@ class Page(_GraphicalElement):
         pass
 
     def one_frame(self, mouse_coords=(0, 0)):
-        """Per-frame update. Override in subclasses, call super().one_frame()."""
-        if self.overlay_particles is not None and self.overlay_particles.is_idle == False:
-            # Convert screen coords to scene coords for particles
-            cursor_scene_xy = None
-            page_coords = self.scene_wrapper.xy_on_mesh(mouse_coords, self.pick_mesh)
-            if page_coords is not None:
-                cursor_scene_xy = (self.bl[0] + page_coords[0], self.bl[1] + page_coords[1])
-            self.overlay_particles.tick(cursor_scene_xy)
+        if self.points_mode is not None:
+            now = time.time()
+            dt = 0.001 if self._last_tick_time is None else (now - self._last_tick_time)
+
+            threshold = 0.02
+            if dt < threshold:
+                return
+
+            self._last_tick_time = now
+
+            max_dt = 2.0 * threshold
+            self.points_mode.tick(dt, max_dt)
 
     def destroy(self):
         # Destroy all containers (which recursively destroy their children)
@@ -170,8 +180,12 @@ class Page(_GraphicalElement):
         self.awaiting_mouse_up.clear()
         self.awaiting_hover_out.clear()
         
-        # Destroy the page's own gfx objects (border, pick_mesh)
         self.die()
+
+        # Clear points-mode (frees its CUDA buffers + scatterplot)
+        if self.points_mode is not None:
+            self.points_mode.destroy()
+            self.points_mode = None
         
         # Clear references
         self._scene = None

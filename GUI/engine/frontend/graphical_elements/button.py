@@ -1,6 +1,7 @@
 from GUI.engine.frontend.graphical_elements.graphical_element import Element_2d, Container
 from GUI.engine.frontend.graphical_elements.parallelepiped import Parallelepiped
 from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, darken, PINK_NEON, BONE, PINK_ELECTRIC, ORANGE_RED, DARK_HIGHLIGHT
+from GUI.engine.frontend import theme as _theme
 from GUI.engine.frontend.audio import play_hover_in, play_hover_out
 import pygfx
 import numpy as np
@@ -144,8 +145,7 @@ class Button_2d(Element_2d):
                 self._apply_style(self.colours.base_border, self.colours.base_text, self.colours.base_bg)
 
     def _apply_style(self, border_colour, text_colour, bg_colour=None):
-        """Low-level helper – sets border, text, and background colours in one shot."""
-        self.border_line.material.color = border_colour
+        self.set_lines_colour(border_colour)
         self.text_obj.material.color    = text_colour
         if bg_colour is not None:
             self.bg_mesh.material.color = bg_colour
@@ -162,20 +162,13 @@ class Button_2d(Element_2d):
 
     def _make_button_borders(self, thickness=2.0):
         hw, hh = self.size[0] / 2, self.size[1] / 2
-        # All 4 borders as a closed loop
-        positions = np.array([
-            [-hw, -hh, 0],
-            [ hw, -hh, 0],
-            [ hw,  hh, 0],
-            [-hw,  hh, 0],
-            [-hw, -hh, 0],  # close the loop
-        ], dtype=np.float32)
+        bl = (-hw, -hh, 0)
+        br = ( hw, -hh, 0)
+        tr = ( hw,  hh, 0)
+        tl = (-hw,  hh, 0)
         
-        geom = pygfx.Geometry(positions=positions)
-        mat = pygfx.LineMaterial(color=self.colour, thickness=thickness, aa=True)
-        self.border_line = pygfx.Line(geom, mat)
-        self.border_line.local.position = self.center
-        self.register_gfx_object(self.border_line)
+        segments = [(bl, br), (br, tr), (tr, tl), (tl, bl)]
+        self.add_lines(segments, colour=self.colour, thickness=thickness)
     
     def _make_text(self, bold=False):
         self.text_obj = pygfx.Text(
@@ -196,7 +189,6 @@ class Button_2d(Element_2d):
     
     def die(self):
         self.scene.remove(self.bg_mesh)
-        self.scene.remove(self.border_line)
         self.scene.remove(self.text_obj)
         super().die()
 

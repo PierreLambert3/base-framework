@@ -11,10 +11,14 @@ import numpy as np
 
 from GUI.engine.comms import _Listeners, Communications
 from GUI.engine.frontend.logic import Front_End
+from GUI.engine.frontend import theme as _theme
 from GUI.pages.IntroPage import Intro_Page
 from GUI.pages.MainPage  import Main_Page
 from GUI.pages.SharedMemoryPage import Shared_Memory_Page
 from GUI.engine.worker.global_constants import SIMULATION_CHUNK_SIZE
+
+FRAME_TIMER = True
+TARGET_FPS  = 24
 
 class Custom_Frontend(Front_End):
     def __init__(self, multiprocessing_context, queue_from_backend, queue_to_backend, shared_dict, window_name="Custom GUI Frontend Window"):
@@ -23,7 +27,7 @@ class Custom_Frontend(Front_End):
         # Per-instance data stream communications (keyed by instance_name)
         self.data_stream_comms_per_instance = {}  # instance_name -> Communications
 
-        self.set_fps(26)
+        self.set_fps(TARGET_FPS)
         self.simulation_chunk_size_timesteps = SIMULATION_CHUNK_SIZE[0]
         
         # Zoom settings
@@ -33,6 +37,19 @@ class Custom_Frontend(Front_End):
         self.min_distance_to_page    = 900.0  # Minimum distance camera can be from page
         self.current_look_at_target  = None
         self.look_at_lerp_factor     = 0.23
+
+        # CUDA context (lazily entered in routine() when POINTS_MODE is on).
+        self.cuda_manager = None
+        self.cuda_ctx     = None
+
+        # HUD overlay (created once in routine(), persists across page switches)
+        self.overlay = None
+
+        # internal timer and counter
+        self.counter_to_1000 = 0
+        self.EMA_frame_time  = 0.01
+        self.EMA_time_slept   = 0.01
+        self.last_tic        = time.time()
 
     def build_listeners(self): # communications with the backend
         self.add_listener("Q1: how many timesteps per simulation chunk", self._handle_how_many_timesteps_per_simulation_chunk)
@@ -46,29 +63,35 @@ class Custom_Frontend(Front_End):
             self.current_page.on_worker_instance_info(data)
     
     def load_intro_page(self):
-        self.set_fps(26)
+        self.set_fps(TARGET_FPS)
         self.scene.camera.local.position = (1000, 800, 2000)
         self._set_camera_look_at((1000, 800, 0.0))
         self._store_default_camera_state()
         self.add_page(Intro_Page(self.scene, "The Main Page", self))
+        if self.overlay is not None:
+            self.overlay.page_changed(self.current_page)
     
     def switch_to_main_page(self):
-        self.set_fps(20)
+        self.set_fps(TARGET_FPS)
         if self.current_page is not None:
             self.current_page.destroy()
         self.scene.camera.local.position = (1000, 800, 2000)
         self._set_camera_look_at((1000, 800, 0.0))
         self._store_default_camera_state()
         self.add_page(Main_Page(self.scene, "main page", self))
+        if self.overlay is not None:
+            self.overlay.page_changed(self.current_page)
 
     def switch_to_shared_memory_page(self):
-        self.set_fps(20)
+        self.set_fps(TARGET_FPS)
         if self.current_page is not None:
             self.current_page.destroy()
         self.scene.camera.local.position = (1000, 800, 2000)
         self._set_camera_look_at((1000, 800, 0.0))
         self._store_default_camera_state()
         self.add_page(Shared_Memory_Page(self.scene, "shared memory page", self))
+        if self.overlay is not None:
+            self.overlay.page_changed(self.current_page)
     
     # ---------------------------------------------------- data stream wiring
     def register_data_stream_comms_for_instance(self, instance_name, queue_from_backend, queue_to_backend):
@@ -91,6 +114,11 @@ class Custom_Frontend(Front_End):
         config        = data.get("config", {})
         q_from_back, q_to_back = data["data_stream_queues"]
         self.register_data_stream_comms_for_instance(instance_name, q_from_back, q_to_back)
+        self.add_data_stream_listener(
+            instance_name,
+            "data stream: iteration rate",
+            lambda data, _n=instance_name: self._on_iteration_rate(data, _n),
+        )
         if self.current_page is not None and hasattr(self.current_page, "on_new_worker_instance"):
             self.current_page.on_new_worker_instance(instance_name, config)
     
@@ -124,10 +152,21 @@ class Custom_Frontend(Front_End):
         self._set_camera_look_at(new_target)
 
     def exit_program(self, data):
+        if self.overlay is not None:
+            self.overlay.destroy()
+            self.overlay = None
         super().exit_program(data)
-        # Clean up data stream comms for all instances
+        # Free data stream comms for all instances
         for instance_data in self.data_stream_comms_per_instance.values():
             instance_data["comms"].empty_queues()
+        # Free CUDA context if we ever entered one (POINTS_MODE).
+        if self.cuda_ctx is not None:
+            try:
+                self.cuda_ctx.exit()
+            except Exception as e:
+                print(f"--- Frontend CUDA context exit error: {e} ---")
+            self.cuda_ctx     = None
+            self.cuda_manager = None
 
     def on_user_event(self, event):
         mouse_event = (event["event_type"] == "pointer_move" or event["event_type"] == "pointer_down" or event["event_type"] == "pointer_up")
@@ -156,6 +195,9 @@ class Custom_Frontend(Front_End):
                     next_index = (current_index + 1) % len(SIMULATION_CHUNK_SIZE)
                     self.simulation_chunk_size_timesteps = SIMULATION_CHUNK_SIZE[next_index]
                     self._handle_how_many_timesteps_per_simulation_chunk(None)
+                    if self.overlay is not None:
+                        chunk_pct = (self.simulation_chunk_size_timesteps - SIMULATION_CHUNK_SIZE[0]) / (SIMULATION_CHUNK_SIZE[-1] - SIMULATION_CHUNK_SIZE[0]) * 100.0
+                        self.overlay.update_chunk_gauge(chunk_pct)
     
     def _handle_wheel_event(self, event):
         """Handle mouse wheel: first try dispatching to scrollable elements, then camera zoom."""
@@ -229,20 +271,42 @@ class Custom_Frontend(Front_End):
         pass
 
     def one_frame(self):
+        # limit framerate to target fps (set with .set_fps())
         if not self.should_it_render():
-            self.scene.canvas.request_draw(self.one_frame)
+            self.scene.canvas.request_draw(self.one_frame) # schedule next frame
             return
-
-        # --- 1. render ---
-        self.scene.render()
-
-        # --- 2. schedule next frame ---
-        self.scene.canvas.request_draw(self.one_frame)
-
-        # --- 3. logic ---
+        
+        self.counter_to_1000 = (self.counter_to_1000 + 1) % 1000
+        
+        # fps_update_every = 6
+        # update_fps = FRAME_TIMER and (self.counter_to_1000 % fps_update_every) == 0
+        fps_alpha = 0.5
+        if FRAME_TIMER:
+            start_time = time.time()
+            self.EMA_time_slept = fps_alpha * self.EMA_time_slept + (1 - fps_alpha) * (start_time - self.last_tic)
+        
+        # --- 1. logic: messages and pages ---
         self.process_messages()
         if self.current_page is not None:
             self.current_page.one_frame(self.mouse_coords)
+
+        # --- 2. render ---
+        self.scene.render()
+
+        # --- 3. schedule next frame ---
+        self.scene.canvas.request_draw(self.one_frame)
+
+        if FRAME_TIMER:
+            end_time = time.time()
+            self.EMA_frame_time = fps_alpha * self.EMA_frame_time + (1 - fps_alpha) * (end_time - start_time)
+
+            FPS_total       = 1.0 / (self.EMA_frame_time + self.EMA_time_slept + 1e-9)
+            pct_time_active = 100.0 * self.EMA_frame_time / (self.EMA_frame_time + self.EMA_time_slept + 1e-9)
+            print(f"--- frontend: work/sleep percentage {pct_time_active:.1f}%, FPS {FPS_total:.1f} ---")
+            if self.overlay is not None:
+                self.overlay.update_perf_stats(pct_time_active, FPS_total)
+                
+            self.last_tic = time.time()
 
     def process_messages(self):
         self.comms.process_messages()
@@ -254,6 +318,14 @@ class Custom_Frontend(Front_End):
         # 1. initialisation
         try:
             self.initialise_scene()
+            # Bring up CUDA in this process if points-mode rendering is enabled.
+            if _theme.POINTS_MODE:
+                from cuda_wrapper import CUDAManager
+                self.cuda_manager = CUDAManager(device_id=0, kernel_dir="kernels")
+                self.cuda_ctx     = self.cuda_manager.create_context(uses_pytorch=False)
+                self.cuda_ctx.enter()
+            from GUI.engine.frontend.overlay import Overlay
+            self.overlay = Overlay(self.scene)
             self.load_intro_page()
             self.build_listeners()
             self.register_user_event_listener(self.on_user_event)
@@ -281,5 +353,9 @@ class Custom_Frontend(Front_End):
         process.start()
         return process
     
+    def _on_iteration_rate(self, data, instance_name):
+        if self.overlay is not None:
+            self.overlay.update_sim_speed(data["iterations_per_second"])
+
     def _handle_how_many_timesteps_per_simulation_chunk(self, _):
         self.send("RE1.1: how many timesteps per simulation chunk", self.simulation_chunk_size_timesteps)

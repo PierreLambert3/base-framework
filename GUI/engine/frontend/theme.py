@@ -5,6 +5,8 @@ BLOOM_TINT           = (1.0, 0.0, -0.1) # amber
 # BLOOM_TINT           = (-0.1, -0.6, -0.2) # wierd
 # BLOOM_TINT           = (-0.1, -0.8, 0.1) # pink neon
 
+POINTS_MODE          = 1
+
 
 POSTPROCESSING_NOISE = 0
 
@@ -13,7 +15,7 @@ AMBER2           = "#FA5908"
 ORANGE_YELLOW    = "#FFA500"
 ORANGE_WHITE     = "#FADE9B"
 ORANGE_RED       = "#FF4500"
-ORANGE_DARK      = "#AD3D00"
+ORANGE_DARK      = "#470500C1"
 BONE             = "#FDECCE"
 
 PINK_NEON        = "#FF3557"

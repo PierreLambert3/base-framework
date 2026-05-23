@@ -8,7 +8,6 @@ from GUI.engine.frontend.graphical_elements.graphical_element import Container
 from GUI.engine.frontend.graphical_elements.scatterplot_2d import Scatterplot2D
 from GUI.engine.frontend.graphical_elements.parallelepiped import Parallelepiped
 from GUI.engine.frontend.graphical_elements.button import Button_2d
-from GUI.engine.frontend.graphical_elements.overlay_particles import OverlayParticles
 from GUI.engine.frontend.theme import AMBER, ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, PURPLE_LIGHT, PINK_ELECTRIC
 import numpy as np
 

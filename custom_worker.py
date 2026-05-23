@@ -3,6 +3,7 @@
 #       wiki/09-example-walkthrough.md (end-to-end trace of this worker).
 # This is the reference example: copy & edit it for new project workers.
 
+import time
 import numpy as np
 
 from cuda_wrapper import LaunchConfig1D, DeviceProperties
@@ -69,10 +70,12 @@ class CustomWorker(WorkerInstance):
     def initialise(self):
         # `self.cuda_ctx` has already been entered by `WorkerInstance.routine`.
         n_points = int(self.config.get("n_points", 1_000))
-        rng = np.random.default_rng()
+        self.EMA_iterations_per_second = 1.0
+        self.prev_chunk_start_time = time.time()
+        self.prev_chunk_size = 10
 
-        positions  = rng.uniform(0.0, 1.0, size=(n_points, 2)).astype(np.float32)
-        velocities = (rng.uniform(-1.0, 1.0, size=(n_points, 2)) * 0.15).astype(np.float32)
+        positions  = np.random.uniform(0.0, 1.0, size=(n_points, 2)).astype(np.float32)
+        velocities = (np.random.uniform(-1.0, 1.0, size=(n_points, 2)) * 0.15).astype(np.float32)
 
         # GPU-resident state.
         self._n_points       = n_points
@@ -117,14 +120,26 @@ class CustomWorker(WorkerInstance):
         return info
 
     def run_simulation_chunk(self, chunk_size, selected_by_frontend, high_speed_mode):
-        # 1. Advance positions on the GPU (one launch per chunk).
-        self.kernels.update_positions(self.streams.compute, self, chunk_size)
+        
+        # 1. monitoring of iteration rate
+        tic = time.time()
+        chunk_time_taken = tic - self.prev_chunk_start_time
+        steps_per_second = self.prev_chunk_size / chunk_time_taken if chunk_time_taken > 0 else 0.0
+        self.EMA_iterations_per_second *= 0.8
+        self.EMA_iterations_per_second += (1 - 0.8) * steps_per_second
+        self.prev_chunk_start_time = tic
+        self.prev_chunk_size       = chunk_size
+        
+        # 2. the simulation chunk
+        for _ in range(chunk_size):
+            time.sleep(0.0003)
+            self.kernels.update_positions(self.streams.compute, self, chunk_size)
 
-        # 2. Copy positions back to the host (synchronous w.r.t. the stream).
+        # 3. Copy positions back to the host (synchronous w.r.t. the stream).
         self._positions_gpu.to_host(out=self._positions_host, stream=self.streams.compute)
         self.streams.compute.sync()
 
-        # 3. Notify the frontend. With shared memory, the host buffer IS the
+        # 4. Notify the frontend. With shared memory, the host buffer IS the
         #    inter-process buffer, so we only ring a doorbell with a frame id.
         #    With queues, we ship the array itself (fire-and-forget snapshot).
         if self._use_shared_memory:
@@ -132,11 +147,19 @@ class CustomWorker(WorkerInstance):
             self.data_stream_comms.send(
                 "data stream: positions ready",
                 {"frame_id": self._frame_id},
-                needs_ack=False,
+                needs_ack=True, # ensure the frontend has acked the previous message, if not, the (new) data will be sent as soon as the ack is received
             )
         else:
             self.data_stream_comms.send(
                 "data stream: positions",
                 {"positions": self._positions_host},
-                needs_ack=False,
+                needs_ack=True, # ensure the frontend has acked the previous message, if not, the (new) data will be sent as soon as the ack is received
+            )
+
+        # 5. if selected, send the iteration rate to the frontend for display in the overlay
+        if self.selected_by_frontend:
+            self.data_stream_comms.send(
+                "data stream: iteration rate",
+                {"iterations_per_second": round(self.EMA_iterations_per_second, 1)},
+                needs_ack=True,
             )
