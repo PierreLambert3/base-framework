@@ -70,8 +70,8 @@ class Rectangles2DDynamic(Element_2d):
                  initial_capacity=10_000, growth_factor=1.5,
                  default_colour=(1, 0.5, 0.1, 1),
                  normalize_coords=False, colour_mode="uniform",
-                 wireframe=False, wireframe_thickness=1.0, ignore_pointmode=False):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, ignore_pointmode=ignore_pointmode)
+                 wireframe=False, wireframe_thickness=1.0, point_mode=None, point_mode_params=None):
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, point_mode=point_mode, point_mode_params=point_mode_params)
         
         self.initial_capacity = initial_capacity
         self.growth_factor = growth_factor
@@ -610,8 +610,8 @@ class Rectangles2DDynamicMultiSeries(Element_2d):
     
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel,
                  series_colours, rect_width=0.01, rect_height=0.01,
-                 initial_capacity_per_series=5_000, growth_factor=1.5, ignore_pointmode=False):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, ignore_pointmode=ignore_pointmode)
+                 initial_capacity_per_series=5_000, growth_factor=1.5, point_mode=None, point_mode_params=None):
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, point_mode=point_mode, point_mode_params=point_mode_params)
         
         self.series_colours = series_colours
         self.n_series = len(series_colours)

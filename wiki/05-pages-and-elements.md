@@ -133,7 +133,72 @@ Common colours and helpers live in
 the `POSTPROCESSING_BLOOM` / `POSTPROCESSING_NOISE` flags at the top of the
 file.
 
-## 5.6 Destroy / GPU resource lifecycle
+## 5.6 Points-mode (swarm-rendered lines)
+
+Every `_GraphicalElement` (page, container, leaf) accepts two optional
+constructor parameters that control whether its `add_lines(...)` calls are
+rendered as plain `pygfx.Line` segments or as CUDA-driven point swarms:
+
+```python
+super().__init__(..., point_mode=None, point_mode_params=None)
+```
+
+* **`point_mode`** — `1` to render lines as swarms via
+  [`PointsModeManager`](../GUI/engine/frontend/points_mode.py), `0` to
+  render as plain lines, `None` (default) to inherit from the closest
+  ancestor that set it explicitly. If nothing in the chain sets it, the
+  effective value is `0`.
+* **`point_mode_params`** — optional `dict` of per-element overrides for
+  the swarm behaviour (only relevant when the resolved `point_mode` is
+  `1`). Recognised keys:
+  `n_points_mul`, `spring_strength`, `jitter_strength`, `dt`, `damping`,
+  `line_upwards_interaction`, `colour_range`. Each entry except
+  `colour_range` is a `(mean, std)` tuple multiplied into the kernel
+  defaults. Keys are resolved per-key by walking the parent chain (an
+  element's dict only needs to contain the keys it wants to override).
+
+`add_lines(...)` itself also accepts a per-call `point_mode_params=` dict
+that takes precedence over the element's own dict and the inherited
+chain.
+
+### `colour_range` special case
+
+`colour_range` is **not** inherited from ancestors. By default it is
+derived from the element's own `colour` as
+`(theme.darken(colour, 0.4), colour)`. Only the element's own
+`point_mode_params={"colour_range": (...)}` (or a per-call
+`add_lines(..., point_mode_params={"colour_range": (...)})`) overrides
+this default.
+
+### Typical recipes
+
+Opt the whole page in to swarm rendering — every child element with
+`point_mode=None` (the default) inherits this:
+
+```python
+class MyPage(Page):
+    def __init__(self, scene, name, frontend, ...):
+        super().__init__(scene, name, frontend, ..., point_mode=1)
+```
+
+Opt a single button out, even though the page enables it:
+
+```python
+Button_2d(..., point_mode=0)
+```
+
+Tweak the swarm look on one element only:
+
+```python
+Button_2d(..., point_mode_params={"n_points_mul": 4.0,
+                                   "jitter_strength": (0.8, 0.1)})
+```
+
+The first time any page actually requests a `PointsModeManager` (via the
+`add_lines` path), the frontend lazily creates a single shared CUDA
+context — see [04-frontend.md](04-frontend.md#cuda-context).
+
+## 5.7 Destroy / GPU resource lifecycle
 
 `die()` removes a single element's `pygfx` objects from the scene. Pages
 recursively call `die()` on every container and element when `destroy()`

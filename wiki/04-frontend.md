@@ -110,3 +110,20 @@ the framework looks for **optional** hooks on the active page:
 | `build_listeners` | add project FE-bound events from the backend |
 | `load_intro_page`, `switch_to_*` | navigation between pages |
 | `_handle_*` | project-specific events from backend / workers |
+
+## 4.8 CUDA context {#cuda-context}
+
+The frontend can use its own CUDA context to drive swarm rendering of
+GUI lines (see [05-pages-and-elements.md](05-pages-and-elements.md#56-points-mode-swarm-rendered-lines)).
+This context is **lazy** — `routine()` no longer creates it eagerly.
+
+`Custom_Frontend._ensure_cuda_context()` is idempotent and is called the
+first time any page allocates a `PointsModeManager` (which happens on the
+first `add_lines(...)` call from an element whose resolved
+`point_mode == 1`). It instantiates a single `CUDAManager(device_id=0,
+kernel_dir="kernels")`, builds an un-entered `CUDAContext` via
+`create_context(uses_pytorch=False)` and calls `.enter()` to bind it to
+the frontend process. Subsequent pages reuse the same context.
+
+If no element ever opts into point-mode, no CUDA context is ever
+created on the frontend process.

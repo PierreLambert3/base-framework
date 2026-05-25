@@ -37,7 +37,7 @@ class Main_Page(Page):
     """
 
     def __init__(self, scene, page_name, frontend, bl_xyz_px=(0, 0, 0), size_xyz_px=(2000, 1600, 0)):
-        super().__init__(scene, page_name, frontend, bl_xyz_px, size_xyz_px)
+        super().__init__(scene, page_name, frontend, bl_xyz_px, size_xyz_px, point_mode=1)
 
         # Top toolbar: two spawn buttons
         toolbar = Container(page_name + " toolbar", self, (0.0, 0.82), (1.0, 0.18), borders=(0, 0, 1, 0))
@@ -53,7 +53,7 @@ class Main_Page(Page):
             text=f"spawn big instance ({BIG_N_POINTS:,} pts)",
             text_colour=AMBER, colour=AMBER,
             pointer_click_callback=self._on_spawn_big_clicked,
-            ignore_pointmode=True
+            point_mode=0
         )
 
         # Grid container holding the scatterplots

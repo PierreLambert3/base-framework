@@ -13,7 +13,7 @@ import numpy as np
 
 class Intro_Page(Page):
     def __init__(self, scene, page_name, frontend, bl_xyz_px=(0,0,0), size_xyz_px=(2000, 1600,0)):
-        super().__init__(scene, page_name, frontend, bl_xyz_px, size_xyz_px)
+        super().__init__(scene, page_name, frontend, bl_xyz_px, size_xyz_px, point_mode=1)
         
         main_container = Container(page_name+"Main Container", self, (0.0, 0.0), (1.0, 1.0), borders=(0,0,0,0))
         self.add_container(main_container)

@@ -1,7 +1,7 @@
 """
 Points-mode renderer.
 
-When `theme.POINTS_MODE` is set, GUI line allocations are redirected here instead of being drawn as `pygfx.Line` objects.
+When a graphical element has point_mode activated, the Lines are instead drawn as many points, animated in CUDA.
 Each registered line owns a slice of a single per-page `Scatterplot3DDynamic`. 
 A CUDA kernel (`kernels/points_mode_motion.cu`) advances the points each frame so they drift around their assigned line.
 
@@ -28,7 +28,7 @@ from GUI.engine.frontend.theme import (
 from cuda_wrapper.helpers import generate_uint32_seed, next_seed_uint32
 
 
-POINTS_PER_0_1_OF_DIAGONAL = 28
+POINTS_PER_0_1_OF_DIAGONAL = 42
 MIN_POINTS_PER_LINE        = 1
 
 POINT_SIZE_PX              = 1
@@ -129,7 +129,7 @@ class LinesHandle:
 
     def set_colour(self, colour):
         # Uniform overwrite: this discards any per-point randomization that
-        # may have been written by a `pointMode_colour_range` argument.
+        # may have been written by a colour_range entry in point_mode_params.
         if not self._alive:
             return
         rgba = _to_rgba(colour)
@@ -320,7 +320,7 @@ class PointsModeManager:
         # 2. GPU -> CPU copy of positions
 
         # dt = min(dt / max_dt, 1.0) * 0.1
-        dt = 0.4
+        dt = 0.17
 
         self.cuda_seed = next_seed_uint32(self.cuda_seed)
         self._kernel.launch(
@@ -345,45 +345,6 @@ class PointsModeManager:
         if self._colours_dirty:
             self._scatter._colours_buffer.update_range(0, n)
             self._colours_dirty = False
-
-
-        """ if not self._tick_phase:
-            # 1. move the points (GPU) 
-            # 2. GPU -> CPU copy of positions
-
-            # dt = min(dt / max_dt, 1.0)
-            dt = 1.0
-
-            self._kernel.launch(
-                self._stream1,
-                self._positions_gpu,
-                self._velocities_gpu,
-                self._line_idx_gpu,
-                self._lines_gpu,
-                self._mods_gpu,
-                np.uint32(self._n_points),
-                np.float32(dt),
-                np.float32(ATTRACTION_MULTIPLIER),
-                np.float32(MOMENTUM),
-                np.float32(self._noise_intensity),
-                np.float32(ENDPOINTEDNESS),
-            )
-            self._positions_gpu.to_host(out=self._pos_host, stream=self._stream1)
-        
-        else:
-
-            # update the visuals
-
-            self._stream1.sync()
-            n = self._n_points
-            self._scatter._positions_buffer.update_range(0, n)
-            self._scatter._positions_buffer.draw_range = (0, n)
-            self._scatter._active_count = n
-            if self._colours_dirty:
-                self._scatter._colours_buffer.update_range(0, n)
-                self._colours_dirty = False
-
-        self._tick_phase = not self._tick_phase """
 
     def destroy(self):
         if self._positions_gpu is not None:

@@ -7,17 +7,34 @@
 import pygfx
 import numpy as np
 from pylinalg import quat_from_axis_angle, quat_from_euler, quat_mul
-from GUI.engine.frontend.theme import ORANGE_RED, ORANGE_YELLOW, ORANGE_DARK, interpolate_color
+from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color, transparent
 
 class _GraphicalElement:
-    def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None, background_colour=None, background_opacity=1.0, ignore_pointmode=False):
+    """
+    point_mode_params: optional dictionary for the settings of the points-mode::
+          - ``n_points_mul``: float, multiplies the auto-computed point count per segment (default ``1.0``).
+          - ``colour_range``: ``(c1, c2)`` colour pair; per-point colour is sampled as ``c1 + (c2 - c1) * U[0,1]**2``. When omitted, the range is derived from the line ``colour`` as ``(darken(colour, 0.4), colour)``. ``colour_range`` is never inherited from ancestors — only the element's own ``point_mode_params`` dict or the per-call override are consulted.
+          - ``spring_strength`` / ``jitter_strength`` / ``dt`` / ``damping``: ``(mu, std)`` tuples — per-point multiplier sampled as ``mu + N(0, std)``.
+          - ``line_upwards_interaction``: ``(mu, std)`` tuple for the per-point upwards-interaction scalar. Positive values attract points on the normal side of the line toward their projection; negative values do the opposite. Decays as ``1/r²``. Zero (default) disables it.
+          - ``looking_at_locations`` / ``invert_lookat``: provided directly as top-level parameters (not part of ``point_mode_params``).
+    """
+    def __init__(self, unique_name, parent, center_xyz_px, size_xyz_px, colour=None, background_colour=None, background_opacity=1.0, line_mode=None, point_mode=None, point_mode_params=None):
         self.name         = unique_name
         self.parent       = parent
         self.pos_xyz      = center_xyz_px
         self.size_xyz     = size_xyz_px
         self.is_leaf      = True
-        self.colour       = colour if colour is not None else interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5)
-        self.ignore_pointmode = ignore_pointmode
+        self.colour       = colour if colour is not None else transparent(interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5), 0.55)
+        # Two independent rendering pipelines for lines:
+        # - line_mode  : regular pygfx LineSegments (default-resolves to 1).
+        # - point_mode : CUDA points-mode swarm        (default-resolves to 0).
+        # None on an element means "inherit from the closest ancestor that sets it",
+        # falling back to the per-flag default if no ancestor specifies it.
+        self.line_mode  = None if line_mode  is None else int(line_mode)
+        self.point_mode = None if point_mode is None else int(point_mode)
+        # Per-key overrides for the points-mode kernel parameters. None=no overrides at this level. 
+        # Resolved per-key via '_resolve_pm_key'
+        self.point_mode_params = point_mode_params
         self._rotation    = (0, 0, 0, 1)  # quaternion (x, y, z, w) - identity rotation
         self._gfx_objects = []  # list of pygfx objects that need rotation applied
         self.pagewise_xy  = self._make_page_coordinates()
@@ -178,66 +195,126 @@ class _GraphicalElement:
         tr_y = bl_y + self.size[1]
         return (bl_x <= x <= tr_x) and (bl_y <= y <= tr_y)
 
+    # ------------------------------------------------------------------
+    # Points-mode resolution helpers
+    # ------------------------------------------------------------------
+    def _resolved_point_mode(self, override=None):
+        """
+        Return the effective point_mode for this element. Inherits from parent if self.point_mode is None.
+        override: if not None, this overrides the process and is returned directly as int(override). 
+        """
+        if override is not None:
+            return int(override)
+        e = self
+        while e is not None:
+            if e.point_mode is not None:
+                return e.point_mode
+            e = e.parent
+        return 0
+
+    def _resolved_line_mode(self, override=None):
+        """
+        Return the effective line_mode for this element. Inherits from parent if self.line_mode is None.
+        override: if not None, returned directly as int(override). Default fallback is 1.
+        """
+        if override is not None:
+            return int(override)
+        e = self
+        while e is not None:
+            if e.line_mode is not None:
+                return e.line_mode
+            e = e.parent
+        return 1
+
+    def _resolve_pm_key(self, key, default):
+        """Return the closest explicit value for key in the point_mode_params dicts found
+          while walking up the parent chain. Falls back to default if no ancestor specifies it.
+        """
+        e = self
+        while e is not None:
+            if e.point_mode_params is not None and key in e.point_mode_params:
+                return e.point_mode_params[key]
+            e = e.parent
+        return default
+
     def add_lines(self, segments,
                   colour=None,
-                  thickness=1.0, # only used when not in points mode
-                  pointMode_n_points_mul=1.0,
-                  pointMode_colour_range=(ORANGE_RED, ORANGE_DARK),
-                  pointMode_spring_strength=(1.0, 0.0),
-                  pointMode_jitter_strength=(1.0, 0.0),
-                  pointMode_dt=(1.0, 0.3),
-                  pointMode_damping=(1.0, 0.0),
-                  pointMode_line_upwards_interaction=(0.0, 0.0),
+                  thickness=1.0,  # only used by the regular-lines pipeline
+                  line_mode=None,
+                  point_mode=None,
+                  point_mode_params=None,
                   looking_at_locations=None,
                   invert_lookat=False):
-        """
-        Add line segments to the graphical element.
-        `segments` should be a list of ((x1, y1, z1), (x2, y2, z2)) in local object space.
+        """Add line segments to the graphical element.
+        segments: a list of ((x1, y1, z1), (x2, y2, z2)) in local object space.
 
-        When `theme.POINTS_MODE` is set, the `pointMode_*` arguments modulate
-        the swarm of points used to render each line:
-          - `pointMode_n_points_mul`: float, multiplies the auto-computed
-            point count per segment.
-          - `pointMode_colour_range`: pair of colours; per-point colour is
-            sampled as `c1 + (c2 - c1) * U[0,1]**2`. Defaults to
-            (ORANGE_WHITE, PURPLE_DARK) when not provided. Pass an explicit
-            `colour` argument and leave this unset for a uniform colour.
-          - `pointMode_spring_strength` / `_jitter_strength` / `_dt`
-            / `_damping`: `(mu, std)` tuples; one multiplier per point is
-            sampled as `mu + N(0, std)` and multiplies the corresponding
-            global kernel parameter on the GPU.
-          - `pointMode_line_upwards_interaction`: `(mu, std)` tuple for the
+        Two independent pipelines may be activated for the same call:
+        - regular-lines pipeline (``line_mode`` resolves to 1): each segment is drawn
+          as an ordinary pygfx LineSegments.
+        - points-mode pipeline (``point_mode`` resolves to 1): each segment is rendered
+          as a swarm of points animated on the GPU.
+        Both can be on simultaneously; their resources are tracked independently.
+
+        ``line_mode`` and ``point_mode`` per-call kwargs override the element's
+        resolved values when not None.
+
+        ``point_mode_params`` is an optional per-call dict that overrides the
+        element's own ``self.point_mode_params`` (and any inherited values)
+        for this single ``add_lines`` call. Recognised keys are:
+          - ``n_points_mul``: float, multiplies the auto-computed point count
+            per segment (default ``1.0``).
+          - ``colour_range``: ``(c1, c2)`` colour pair; per-point colour is
+            sampled as ``c1 + (c2 - c1) * U[0,1]**2``. When omitted, the range
+            is derived from the line ``colour`` as
+            ``(darken(colour, 0.4), colour)``. ``colour_range`` is never
+            inherited from ancestors — only the element's own
+            ``point_mode_params`` dict or the per-call override are consulted.
+          - ``spring_strength`` / ``jitter_strength`` / ``dt`` / ``damping``:
+            ``(mu, std)`` tuples — per-point multiplier sampled as
+            ``mu + N(0, std)``.
+          - ``line_upwards_interaction``: ``(mu, std)`` tuple for the
             per-point upwards-interaction scalar. Positive values attract
-            points that are on the normal side of the line toward their
-            projection; negative values do the same for the opposite side.
-            Intensity decays as 1/r². Zero (default) disables the interaction.
-          - `looking_at_locations`: list of one 3D point per segment (in local
-            object space). The up-normal for each line is computed as
-            `looking_at_locations[i] - midpoint(segment[i])`. When omitted
-            (or an empty list), the mean of all segment endpoints is used as a
-            shared look-at target (with a small per-segment noise offset), so
-            e.g. all edges of a rectangle automatically look toward its center.
-          - `invert_lookat`: if True, flip the computed up-normal direction.
+            points on the normal side of the line toward their projection;
+            negative values do the opposite. Decays as ``1/r²``. Zero
+            (default) disables it.
+          - ``looking_at_locations`` / ``invert_lookat``: provided directly as
+            top-level parameters (not part of ``point_mode_params``).
+
+        For keys other than ``colour_range``, missing entries fall back to the
+        element's own ``point_mode_params``, then walk up the parent chain
+        (per-key inheritance), and finally to hard-coded defaults.
         """
         from GUI.engine.frontend import theme as _theme
         if colour is None:
             colour = self.colour
 
-        if _theme.POINTS_MODE and not self.ignore_pointmode:
-            # Default colour range only kicks in if the caller did not
-            # explicitly pass one AND did not override `colour`.
-            colour_range = pointMode_colour_range
-            if colour_range is None and colour is self.colour:
-                colour_range = (_theme.ORANGE_WHITE, _theme.PURPLE_DARK)
+        do_points_mode = self._resolved_point_mode(override=point_mode)
+        do_line_mode   = self._resolved_line_mode(override=line_mode)
+        if do_points_mode:
+            per_call = point_mode_params if point_mode_params is not None else {}
+
+            def _resolve(key, default):
+                if key in per_call:
+                    return per_call[key]
+                return self._resolve_pm_key(key, default)
+
+            # ``colour_range`` is special: it is derived from the line's own
+            # colour by default and is NEVER inherited from ancestors.
+            if "colour_range" in per_call:
+                colour_range = per_call["colour_range"]
+            elif self.point_mode_params is not None and "colour_range" in self.point_mode_params:
+                colour_range = self.point_mode_params["colour_range"]
+            else:
+                colour_range = (_theme.darken(colour, 0.4), colour)
 
             point_mods = {
-                "n_points_mul":             float(pointMode_n_points_mul),
+                "n_points_mul":             float(_resolve("n_points_mul", 1.0)),
                 "colour_range":             colour_range,
-                "spring_strength":          pointMode_spring_strength,
-                "jitter_strength":          pointMode_jitter_strength,
-                "dt":                       pointMode_dt,
-                "damping":                  pointMode_damping,
-                "line_upwards_interaction": pointMode_line_upwards_interaction,
+                "spring_strength":          _resolve("spring_strength", (1.0, 0.0)),
+                "jitter_strength":          _resolve("jitter_strength", (1.0, 0.0)),
+                "dt":                       _resolve("dt", (1.0, 0.3)),
+                "damping":                  _resolve("damping", (1.0, 0.0)),
+                "line_upwards_interaction": _resolve("line_upwards_interaction", (0.0, 0.0)),
             }
 
             # Compute per-segment up-normal vectors in local object space.
@@ -276,7 +353,7 @@ class _GraphicalElement:
             handle = pm.register_lines(abs_segments, colour=colour, point_mods=point_mods,
                                        line_up_vectors=line_up_vectors)
             self._points_mode_handles.append(handle)
-        else:
+        if do_line_mode:
             positions = []
             for p1, p2 in segments:
                 positions.append(p1)
@@ -290,20 +367,20 @@ class _GraphicalElement:
             self._gfx_lines.append(line_obj)
             self.register_gfx_object(line_obj)
 
-    def set_lines_colour(self, colour):
-        from GUI.engine.frontend import theme as _theme
-        if _theme.POINTS_MODE:
+    def set_lines_colour(self, colour, line_mode=True, point_mode=True):
+        """Update the colour of the lines owned by this element. ``line_mode`` and
+        ``point_mode`` select which pipeline(s) to update; both default to True."""
+        if point_mode:
             for handle in self._points_mode_handles:
                 handle.set_colour(colour)
-        else:
+        if line_mode:
             for line_obj in self._gfx_lines:
                 line_obj.material.color = colour
 
     def set_lines_thickness(self, thickness):
-        from GUI.engine.frontend import theme as _theme
-        if not _theme.POINTS_MODE:
-            for line_obj in self._gfx_lines:
-                line_obj.material.thickness = thickness
+        # Thickness only applies to the regular-lines pipeline.
+        for line_obj in self._gfx_lines:
+            line_obj.material.thickness = thickness
 
     def die(self):
         """
@@ -443,10 +520,10 @@ class _GraphicalElement:
         particles.leave_element()
 
 class Element_2d(_GraphicalElement):
-    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, colour=None, background_colour=None, ignore_pointmode=False): # pos_xy_rel: bottom-left corner
+    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, colour=None, background_colour=None, line_mode=None, point_mode=None, point_mode_params=None): # pos_xy_rel: bottom-left corner
         size_xyz_px  = (size_xy_rel[0]*parent.size[0], size_xy_rel[1]*parent.size[1], 0)
         center_px    = (parent.bl[0] + bl_xy_rel[0]*parent.size[0] + size_xyz_px[0]/2, parent.bl[1] + bl_xy_rel[1]*parent.size[1] + size_xyz_px[1]/2, parent.bl[2])
-        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour, background_colour=background_colour, ignore_pointmode=ignore_pointmode)
+        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour, background_colour=background_colour, line_mode=line_mode, point_mode=point_mode, point_mode_params=point_mode_params)
 
     def _make_borders(self, borders, thickness=1.0):
         if sum(borders) == 0:
@@ -470,19 +547,19 @@ class Element_2d(_GraphicalElement):
         self.add_lines(segments, colour=border_colour, thickness=thickness)
 
 class Element_3d(_GraphicalElement):
-    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, colour=None, ignore_pointmode=False):
+    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, colour=None, line_mode=None, point_mode=None, point_mode_params=None):
         center_px = (bl_xyz_px[0] + size_xyz_px[0]/2, bl_xyz_px[1] + size_xyz_px[1]/2, bl_xyz_px[2] + size_xyz_px[2]/2)
-        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour, ignore_pointmode=ignore_pointmode)
+        super().__init__(unique_name, parent, center_px, size_xyz_px, colour=colour, line_mode=line_mode, point_mode=point_mode, point_mode_params=point_mode_params)
 
 class Container(Element_2d):
-    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, borders = (0, 0, 0, 0), colour=None, background_colour=None, ignore_pointmode=False):
+    def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, borders = (0, 0, 0, 0), colour=None, background_colour=None, line_mode=None, point_mode=None, point_mode_params=None):
         # borders: (top, right, bottom, left) "0" means no border, "1" means full border
         self.is_container = True
         self.is_leaf  = False
         self.children = []
         self.children_dict = {}
         self.border_flags = borders
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, background_colour=background_colour, ignore_pointmode=ignore_pointmode)
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, background_colour=background_colour, line_mode=line_mode, point_mode=point_mode, point_mode_params=point_mode_params)
         self._make_borders(borders)
         self.on_show = None  # user-defined callback when container is shown
     

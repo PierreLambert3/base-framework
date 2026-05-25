@@ -1,6 +1,5 @@
 from GUI.engine.frontend.graphical_elements.graphical_element import Element_3d
 from GUI.engine.frontend.theme import ORANGE_YELLOW, ORANGE_DARK, interpolate_color
-from GUI.engine.frontend import theme as _theme
 import pygfx
 import numpy as np
 
@@ -10,8 +9,8 @@ class Parallelepiped(Element_3d):
     A 3D parallelepiped (box) element with visible edges.
     The 12 edges of the box are drawn as lines.
     """
-    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, edge_color=None, edge_thickness=1.0, colour=None, ignore_pointmode=False):
-        super().__init__(unique_name, parent, bl_xyz_px, size_xyz_px, colour=colour, ignore_pointmode=ignore_pointmode)
+    def __init__(self, unique_name, parent, bl_xyz_px, size_xyz_px, edge_color=None, edge_thickness=1.0, colour=None, line_mode=None, point_mode=None, point_mode_params=None):
+        super().__init__(unique_name, parent, bl_xyz_px, size_xyz_px, colour=colour, line_mode=line_mode, point_mode=point_mode, point_mode_params=point_mode_params)
 
         self.edge_color = edge_color if edge_color is not None else interpolate_color(ORANGE_YELLOW, ORANGE_DARK, 0.5)
         self.edge_thickness = edge_thickness
@@ -48,6 +47,6 @@ class Parallelepiped(Element_3d):
         self.set_lines_thickness(thickness)
 
     def die(self):
-        if not _theme.POINTS_MODE:
+        if not self._resolved_point_mode():
             self.scene.remove(self.edges_group)
         super().die()

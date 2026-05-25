@@ -11,7 +11,6 @@ import numpy as np
 
 from GUI.engine.comms import _Listeners, Communications
 from GUI.engine.frontend.logic import Front_End
-from GUI.engine.frontend import theme as _theme
 from GUI.pages.IntroPage import Intro_Page
 from GUI.pages.MainPage  import Main_Page
 from GUI.pages.SharedMemoryPage import Shared_Memory_Page
@@ -38,7 +37,8 @@ class Custom_Frontend(Front_End):
         self.current_look_at_target  = None
         self.look_at_lerp_factor     = 0.23
 
-        # CUDA context (lazily entered in routine() when POINTS_MODE is on).
+        # CUDA context (lazily entered the first time a page asks for points
+        # mode via `_ensure_cuda_context()`).
         self.cuda_manager = None
         self.cuda_ctx     = None
 
@@ -55,6 +55,20 @@ class Custom_Frontend(Front_End):
         self.add_listener("Q1: how many timesteps per simulation chunk", self._handle_how_many_timesteps_per_simulation_chunk)
         self.add_listener("new worker instance created",                self._handle_new_worker_instance_created)
         self.add_listener("worker instance info",                       self._handle_worker_instance_info)
+
+    def _ensure_cuda_context(self):
+        """Idempotently bring up a single, frontend-wide CUDA context.
+
+        Called the first time any page constructs its ``PointsModeManager``.
+        Subsequent calls are no-ops; the context is torn down in
+        :meth:`exit_program`.
+        """
+        if self.cuda_ctx is not None:
+            return
+        from cuda_wrapper import CUDAManager
+        self.cuda_manager = CUDAManager(device_id=0, kernel_dir="kernels")
+        self.cuda_ctx     = self.cuda_manager.create_context(uses_pytorch=False)
+        self.cuda_ctx.enter()
 
     def _handle_worker_instance_info(self, data):
         """Project-specific metadata sent by a worker instance once it has
@@ -159,7 +173,7 @@ class Custom_Frontend(Front_End):
         # Free data stream comms for all instances
         for instance_data in self.data_stream_comms_per_instance.values():
             instance_data["comms"].empty_queues()
-        # Free CUDA context if we ever entered one (POINTS_MODE).
+        # Free CUDA context if it was ever entered (any page used points mode).
         if self.cuda_ctx is not None:
             try:
                 self.cuda_ctx.exit()
@@ -315,12 +329,6 @@ class Custom_Frontend(Front_End):
         # 1. initialisation
         try:
             self.initialise_scene()
-            # Bring up CUDA in this process if points-mode rendering is enabled.
-            if _theme.POINTS_MODE:
-                from cuda_wrapper import CUDAManager
-                self.cuda_manager = CUDAManager(device_id=0, kernel_dir="kernels")
-                self.cuda_ctx     = self.cuda_manager.create_context(uses_pytorch=False)
-                self.cuda_ctx.enter()
             from GUI.engine.frontend.overlay import Overlay
             self.overlay = Overlay(self.scene)
             self.load_intro_page()

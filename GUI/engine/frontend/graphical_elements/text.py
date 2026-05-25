@@ -11,8 +11,17 @@ class Text(Element_2d):
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, text, 
                  colour=None, text_colour=ORANGE_YELLOW, font_size=24,
                  pointer_move_inside_callback=None, pointer_click_callback=None,
-                 toggleable=False, ignore_pointmode=False):
-        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, ignore_pointmode=ignore_pointmode)
+                 toggleable=False, line_mode=0, point_mode=0, point_mode_params=None):
+        
+        # Text element do not support point mode
+        if point_mode != 0:
+            print(f"Warning: point mode for Text graphical element is not implemented yet, falling back to point_mode=0")
+            point_mode = 0
+        if line_mode != 0:
+            print(f"Warning: line mode for Text graphical element is not implemented yet, falling back to line_mode=0")
+            line_mode = 0
+
+        super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, line_mode=line_mode, point_mode=point_mode, point_mode_params=point_mode_params)
         self.text = text
         self.text_colour = text_colour
         self.font_size = font_size

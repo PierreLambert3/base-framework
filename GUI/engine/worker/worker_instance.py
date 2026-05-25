@@ -87,6 +87,10 @@ class WorkerInstance:
         """Override to react to the frontend changing the simulation chunk size."""
         pass
 
+    def _on_instance_selected(self):
+        """Override to react to this instance becoming the active (selected) tab."""
+        pass
+
     def _on_exit(self, data):
         """Override to release project-specific resources before queues are torn down."""
         pass
@@ -174,4 +178,3 @@ class WorkerInstance:
 
     def _handle_instance_deselected(self, data):
         self.selected_by_frontend = False
-        self._on_instance_deselected()

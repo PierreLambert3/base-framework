@@ -3,18 +3,17 @@
 # (recipes for adding pages and subscribing to worker data streams).
 
 from GUI.engine.frontend.graphical_elements.graphical_element import _GraphicalElement
-from GUI.engine.frontend import theme as _theme
 import pygfx
 import time
 import numpy as np
 
 class Page(_GraphicalElement):
-    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None, no_border=False, ignore_pointmode=False):
+    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None, no_border=False, line_mode=None, point_mode=None, point_mode_params=None):
         self.frontend       = frontend
         self._scene         = scene.scene
         self._scene_wrapper = scene
         center_xyz = bl_xyz_px[0] + size_xyz_px[0]/2, bl_xyz_px[1] + size_xyz_px[1]/2, bl_xyz_px[2] + size_xyz_px[2]/2
-        super().__init__(unique_name, None, center_xyz, size_xyz_px, colour=colour, ignore_pointmode=ignore_pointmode)
+        super().__init__(unique_name, None, center_xyz, size_xyz_px, colour=colour, line_mode=line_mode, point_mode=point_mode, point_mode_params=point_mode_params)
         self.is_leaf          = False
         self.containers       = []
         self._containers_dict = {}
@@ -113,18 +112,21 @@ class Page(_GraphicalElement):
         tr = ( hw,  hh, 0)
         tl = (-hw,  hh, 0)
         segments = [(bl, br), (br, tr), (tr, tl), (tl, bl)]
-        from GUI.engine.frontend.theme import transparent, darken, PINK_ELECTRIC, BLUE_WIERDNESS, AMBER2, ORANGE_DARK, AMBER, BONE, ORANGE_YELLOW
-        self.add_lines(segments, pointMode_n_points_mul = 5.0, 
-                       pointMode_colour_range=(transparent(darken(ORANGE_DARK, 0.1), 0.2), transparent(darken(AMBER2, 0.1), 0.2)),
-                       pointMode_spring_strength=(3.0, 0.01),
-                       pointMode_jitter_strength=(0.3, 0.01),
-                       pointMode_line_upwards_interaction=(2.0, 1.6),
-                       pointMode_dt=(0.1, 0.05),
-                       invert_lookat=True)
+        from GUI.engine.frontend.theme import transparent, darken, AMBER2, ORANGE_DARK
+        border_pm_params = {
+            "n_points_mul":             5.0,
+            "colour_range":             (transparent(darken(ORANGE_DARK, 0.1), 0.2), transparent(darken(AMBER2, 0.1), 0.2)),
+            "spring_strength":          (3.0, 0.01),
+            "jitter_strength":          (0.3, 0.01),
+            "line_upwards_interaction": (2.0, 1.6),
+            "dt":                       (0.1, 0.05),
+        }
+        self.add_lines(segments, point_mode_params=border_pm_params, invert_lookat=False)
 
     def _ensure_points_mode(self):
-        """Lazily create this page's PointsModeManager."""
+        """Lazily create this page's PointsModeManager and the shared frontend-wide CUDA context it depends on."""
         if self.points_mode is None:
+            self.frontend._ensure_cuda_context()
             from GUI.engine.frontend.points_mode import PointsModeManager
             self.points_mode = PointsModeManager(self)
         return self.points_mode
