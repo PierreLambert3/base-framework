@@ -1,10 +1,6 @@
 POSTPROCESSING_BLOOM = 1
-BLOOM_TINT           = (0.5, 0.0, -0.01) # amber
-# BLOOM_TINT           = (0.8, 0.1, 0.02) # amber (less intense)
-# BLOOM_TINT           = (-0.1, -0.99,  0.83) # ultraviolet
-# BLOOM_TINT           = (-0.1, -0.6, -0.2) # wierd
-# BLOOM_TINT           = (-0.1, -0.8, 0.1) # pink neon
-
+BLOOM_TINT           = (0.3, 0.18, -0.01)
+BLOOM_STRENGHT = 10.0
 
 POSTPROCESSING_NOISE = 0
 

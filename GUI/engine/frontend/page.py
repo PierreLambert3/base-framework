@@ -8,7 +8,7 @@ import time
 import numpy as np
 
 class Page(_GraphicalElement):
-    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None, no_border=False, line_mode=None, point_mode=None, point_mode_params=None):
+    def __init__(self, scene, unique_name, frontend, bl_xyz_px, size_xyz_px, colour=None, no_border=True, line_mode=None, point_mode=None, point_mode_params=None):
         self.frontend       = frontend
         self._scene         = scene.scene
         self._scene_wrapper = scene
@@ -112,13 +112,13 @@ class Page(_GraphicalElement):
         tr = ( hw,  hh, 0)
         tl = (-hw,  hh, 0)
         segments = [(bl, br), (br, tr), (tr, tl), (tl, bl)]
-        from GUI.engine.frontend.theme import transparent, darken, AMBER2, ORANGE_DARK
+        from GUI.engine.frontend.theme import transparent, darken, AMBER2, ORANGE_DARK, ORANGE_RED
         border_pm_params = {
-            "n_points_mul":             5.0,
-            "colour_range":             (transparent(darken(ORANGE_DARK, 0.1), 0.2), transparent(darken(AMBER2, 0.1), 0.2)),
-            "spring_strength":          (3.0, 0.01),
+            "n_points_mul":             3.0,
+            "colour_range":             (transparent(ORANGE_RED, 0.2), ORANGE_RED),
+            "spring_strength":          (1.0, 0.01),
             "jitter_strength":          (0.3, 0.01),
-            "line_upwards_interaction": (2.0, 1.6),
+            "line_upwards_interaction": (0.0, 0.1),
             "dt":                       (0.1, 0.05),
         }
         self.add_lines(segments, point_mode_params=border_pm_params, invert_lookat=False)
@@ -156,15 +156,11 @@ class Page(_GraphicalElement):
         if self.points_mode is not None:
             now = time.time()
             dt = 0.001 if self._last_tick_time is None else (now - self._last_tick_time)
-
-            threshold = 0.03
-            if dt < threshold:
+            if dt < 0.03:
                 return
-
             self._last_tick_time = now
 
-            max_dt = 2.0 * threshold
-            self.points_mode.tick(dt, max_dt)
+            self.points_mode.tick(dt)
 
     def destroy(self):
         # Destroy all containers (which recursively destroy their children)

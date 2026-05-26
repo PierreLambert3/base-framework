@@ -163,8 +163,8 @@ class Button_2d(Element_2d):
             border, text, bg = self.colours.unclickable_border, self.colours.unclickable_text, self.colours.unclickable_bg
             for handle in self._points_mode_handles:
                 handle.set_point_mods(colour_range=(_theme.transparent(text, 0.02), _theme.transparent(text, 0.9)),
-                                      spring_strength=(2.0, 0.1),
-                                      jitter_strength=(2.0, 0.1),
+                                      spring_strength=(1.0, 0.1),
+                                      jitter_strength=(1.0, 0.1),
                                       line_upwards_interaction=(0.0, 0.1),
                                       dt = (0.02, 0.001))
                 
@@ -172,43 +172,44 @@ class Button_2d(Element_2d):
             border, text, bg = self.colours.clicking_border, self.colours.clicking_text, self.colours.clicking_bg
             for handle in self._points_mode_handles:
                 handle.set_point_mods(colour_range=(border, _theme.transparent(_theme.brighten(border, 0.3), 0.6)),
-                                      spring_strength=(4.0, 0.1),
-                                      jitter_strength=(500.0, 2.1),
-                                      line_upwards_interaction=(5.0, 0.1),
-                                      dt = (0.1, 0.001))
+                                      spring_strength=(1.0, 0.1),
+                                      jitter_strength=(8.0, 2.1),
+                                      line_upwards_interaction=(20.0, 0.1),
+                                      dt = (0.3, 0.001))
 
         if state == "active_hovered":
             border = self.colours.hovered_border
+            bg = self.colours.active_bg
             for handle in self._points_mode_handles:
-                handle.set_point_mods(colour_range=(border, _theme.transparent(_theme.brighten(border, 0.3), 0.6)),
-                                      spring_strength=(3.0, 0.1),
-                                      jitter_strength=(18.0, 5.1),
+                handle.set_point_mods(colour_range=(bg, _theme.transparent(_theme.brighten(bg, 0.3), 0.5)),
+                                      spring_strength=(0.3, 0.1),
+                                      jitter_strength=(1.0, 1.0),
                                       line_upwards_interaction=(0.0, 0.1),
-                                      dt = (0.04, 0.001))
+                                      dt = (0.1, 0.001))
         if state == "hovered":
             border, text, bg = self.colours.hovered_border, self.colours.hovered_text, self.colours.hovered_bg
             for handle in self._points_mode_handles:
                 handle.set_point_mods(colour_range=(border, _theme.transparent(_theme.brighten(border, 0.3), 0.6)),
-                                      spring_strength=(3.0, 0.1),
-                                      jitter_strength=(18.0, 5.1),
+                                      spring_strength=(0.1, 0.1),
+                                      jitter_strength=(1.0, 2.0),
                                       line_upwards_interaction=(0.0, 0.1),
-                                      dt = (0.04, 0.001))
+                                      dt = (0.03, 0.001))
         if state == "active":
             border, text, bg = self.colours.active_border, self.colours.active_text, self.colours.active_bg
             for handle in self._points_mode_handles:
-                handle.set_point_mods(colour_range=(_theme.transparent(_theme.brighten(border, 0.3), 0.02), _theme.transparent(_theme.brighten(border, 0.3), 0.6)),
-                                      spring_strength=(1.0, 0.1),
-                                      jitter_strength=(3.0, 5.1),
-                                      line_upwards_interaction=(0.0, 0.1),
-                                      dt = (0.02, 0.001))
+                handle.set_point_mods(colour_range=(_theme.transparent(_theme.darken(border, 0.8), 0.6), _theme.transparent(_theme.darken(border, 0.8), 0.6)),
+                                      spring_strength=(0.05, 0.01),
+                                      jitter_strength=(1.0, 3.0),
+                                      line_upwards_interaction=(0.0, 0.0),
+                                      dt = (0.2, 0.001))
         if state == "base":
             border, text, bg = self.colours.base_border, self.colours.base_text, self.colours.base_bg
             for handle in self._points_mode_handles:
-                handle.set_point_mods(colour_range=(_theme.transparent(_theme.darken(border, 0.5), 0.2), _theme.transparent(_theme.brighten(border, 0.2), 0.7)),
-                                      spring_strength=(3.0, 0.1),
-                                      jitter_strength=(2.3, 0.2),
-                                      line_upwards_interaction=(0.0, 0.1),
-                                      dt = (0.1, 0.001))
+                handle.set_point_mods(colour_range=(_theme.transparent(_theme.darken(border, 0.8), 0.4), _theme.transparent(_theme.brighten(border, 0.05), 0.8)),
+                                      spring_strength=(2.4, 0.4),
+                                      jitter_strength=(1.0, 0.8),
+                                      line_upwards_interaction=(0.0, 0.0),
+                                      dt = (0.2, 0.001))
 
 
     def _update_visual_state(self):

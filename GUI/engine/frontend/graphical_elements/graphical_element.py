@@ -305,7 +305,7 @@ class _GraphicalElement:
             elif self.point_mode_params is not None and "colour_range" in self.point_mode_params:
                 colour_range = self.point_mode_params["colour_range"]
             else:
-                colour_range = (_theme.darken(colour, 0.4), colour)
+                colour_range = (_theme.transparent(colour, 0.4), colour)
 
             point_mods = {
                 "n_points_mul":             float(_resolve("n_points_mul", 1.0)),

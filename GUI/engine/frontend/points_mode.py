@@ -28,11 +28,9 @@ from GUI.engine.frontend.theme import (
 from cuda_wrapper.helpers import generate_uint32_seed, next_seed_uint32
 
 
-POINTS_PER_0_1_OF_DIAGONAL = 42
+POINTS_PER_0_1_OF_DIAGONAL = 64
 MIN_POINTS_PER_LINE        = 1
-
 POINT_SIZE_PX              = 1
-
 GROWTH_FACTOR              = 1.2
 
 
@@ -273,7 +271,7 @@ class PointsModeManager:
         self._n_lines         = 0
 
         self._point_vel      = np.zeros((self._scatter._capacity, 3), dtype=np.float32)
-        self._point_line_idx = np.zeros((self._scatter._capacity,),   dtype=np.int32)
+        self._point_line_idx = np.zeros((self._scatter._capacity,),   dtype=np.uint32)
         # Packed per-point modulation: columns [spring, jitter, dt, damping].
         # Initialized to 1.0 so unmodulated points pass through unchanged.
         self._point_mods     = np.ones((self._scatter._capacity, N_MOD_COLS), dtype=np.float32)
@@ -312,15 +310,17 @@ class PointsModeManager:
         self._sync_to_gpu()
         return handle
 
-    def tick(self, dt: float, max_dt: float):
+    def tick(self, dt: float):
         if self._n_points == 0:
             return
 
         # 1. move the points (GPU) 
         # 2. GPU -> CPU copy of positions
 
-        # dt = min(dt / max_dt, 1.0) * 0.1
-        dt = 0.17
+        
+        dt = max(0.02, min(dt * 2.0, 0.2))
+        # dt *= 5.0
+        dt *= 3.0
 
         self.cuda_seed = next_seed_uint32(self.cuda_seed)
         self._kernel.launch(
@@ -512,7 +512,7 @@ class PointsModeManager:
         self._colour_host = self._scatter._colours_buffer.data
         cap = self._scatter._capacity
         new_vel  = np.zeros((cap, 3),          dtype=np.float32)
-        new_idx  = np.zeros((cap,),            dtype=np.int32)
+        new_idx  = np.zeros((cap,),            dtype=np.uint32)
         new_mods = np.ones((cap, N_MOD_COLS), dtype=np.float32)
         if self._n_points > 0:
             new_vel[:self._n_points]  = self._point_vel[:self._n_points]
@@ -559,9 +559,7 @@ class PointsModeManager:
                            dt=None, damping=None, colour_range=None,
                            line_upwards_interaction=None):
         """Re-sample selected modulation columns and/or colours for `handle`.
-
-        Uploads a single batched copy at the end. No-op if every argument is
-        None.
+        Uploads a single batched copy at the end. No-op if every argument is None.
         """
         col_specs = [
             (MOD_SPRING,  spring_strength),

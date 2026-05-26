@@ -24,7 +24,7 @@ class Scene:
         # post processing effects
         self.bloom = None
         effect_passes = []
-        from GUI.engine.frontend.theme import POSTPROCESSING_BLOOM, POSTPROCESSING_NOISE, BLOOM_TINT
+        from GUI.engine.frontend.theme import POSTPROCESSING_BLOOM, POSTPROCESSING_NOISE, BLOOM_TINT, BLOOM_STRENGHT
         if POSTPROCESSING_NOISE: # noise effect
             effect_passes.append(pygfx.renderers.wgpu.NoisePass(noise=0.012))
         if POSTPROCESSING_BLOOM: # bloom effect
@@ -33,8 +33,7 @@ class Scene:
                 depth=5,
                 threshold=0.4,
                 knee=0.2,
-                strength=20.0,
-                # strength=2.0,
+                strength=BLOOM_STRENGHT,
                 color_select=True,
                 color_center=BLOOM_TINT,  # Blue tint
                 color_sigma=0.95,  # Now acts as tint strength (0-1), 0.8 = strong tint

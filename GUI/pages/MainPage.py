@@ -53,7 +53,7 @@ class Main_Page(Page):
             text=f"spawn big instance ({BIG_N_POINTS:,} pts)",
             text_colour=AMBER, colour=AMBER,
             pointer_click_callback=self._on_spawn_big_clicked,
-            point_mode=0
+            point_mode=1, line_mode=0,
         )
 
         # Grid container holding the scatterplots
