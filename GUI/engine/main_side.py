@@ -16,7 +16,8 @@
 # module is unused.
 
 from GUI.engine.comms import _Listeners, Communications
-from GUI.engine.backend.logic import REGISTER_SHARED_ARRAY_FROM_MAIN
+from GUI.engine.backend.logic import REGISTER_SHARED_ARRAY_FROM_MAIN, REGISTER_SHARED_ARRAY_FOR_WORKER
+from GUI.engine.shared_array import SharedArray
 
 
 class Main_Side:
@@ -28,7 +29,7 @@ class Main_Side:
         # Tracks the shared-memory arrays this side has allocated for the
         # backend to attach to. Initially empty; populated by
         # `register_shared_array_for_backend(...)`.
-        self.shared_arrays = {} # key -> numpy ndarray view
+        self.shared_arrays = {} # key -> SharedArray
 
         # Default: a backend-initiated shutdown also stops the main loop.
         self.add_listener("exit program", self.exit_program)
@@ -52,19 +53,43 @@ class Main_Side:
 
     # ----------------------------------------------- shared-memory arrays
     def register_shared_array_for_backend(self, key, shape, dtype):
-        """Allocate a shared-memory numpy array on the main side, store the
-        ndarray view in `self.shared_arrays[key]`, and ship the descriptor
-        to the backend so it can attach. Returns the ndarray view.
-        """
-        arr  = self.comms.create_shared_array(key, shape, dtype)
+        """Allocate a shared-memory numpy array on the main side and ship the
+        descriptor to the backend. Returns a `SharedArray` wrapper. Subsequent
+        growth is handled by the wrapper itself (auto-broadcasts the new
+        descriptor via the `on_reallocated` callback)."""
+        if key in self.shared_arrays:
+            return self.shared_arrays[key]
+        def _on_reallocated(info, _key=key):
+            self.send(REGISTER_SHARED_ARRAY_FROM_MAIN, {"key": _key, **info}, needs_ack=True)
+        sa = SharedArray(self.comms, key, shape, dtype, on_reallocated=_on_reallocated)
+        self.shared_arrays[key] = sa
         info = self.comms.get_shared_array_info(key)
-        self.shared_arrays[key] = arr
-        payload = {"key": key, **info}
-        self.send(REGISTER_SHARED_ARRAY_FROM_MAIN, payload, needs_ack=True)
-        return arr
+        self.send(REGISTER_SHARED_ARRAY_FROM_MAIN, {"key": key, **info}, needs_ack=True)
+        return sa
 
     def get_shared_array(self, key):
         return self.shared_arrays.get(key)
+
+    # ----------------------- shared-memory arrays for a worker instance
+    def register_shared_array_for_worker(self, instance_name, key, shape, dtype):
+        """Allocate a shared-memory numpy array on the main side and ship its
+        descriptor to the backend, which (a) attaches it on the backend side
+        and (b) forwards the descriptor to the named worker. Returns a
+        `SharedArray` wrapper; subsequent growth is handled by the wrapper
+        (auto-broadcasts the new descriptor via `on_reallocated`)."""
+        if key in self.shared_arrays:
+            return self.shared_arrays[key]
+        def _on_reallocated(info, _name=instance_name, _key=key):
+            self.send(REGISTER_SHARED_ARRAY_FOR_WORKER,
+                      {"instance_name": _name, "key": _key, **info},
+                      needs_ack=True)
+        sa = SharedArray(self.comms, key, shape, dtype, on_reallocated=_on_reallocated)
+        self.shared_arrays[key] = sa
+        info = self.comms.get_shared_array_info(key)
+        self.send(REGISTER_SHARED_ARRAY_FOR_WORKER,
+                  {"instance_name": instance_name, "key": key, **info},
+                  needs_ack=True)
+        return sa
 
     # ---------------------------------------------------------------- exit
     def exit_program(self, data=None):

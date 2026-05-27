@@ -5,11 +5,14 @@
 import multiprocessing
 import time
 from GUI.engine.comms import _Listeners, Communications
+from GUI.engine.shared_array import SharedArray
 from GUI.engine.worker.worker_instance import comms_prefix
 
 DEAD_AFTER_S = 5.0
 
-REGISTER_SHARED_ARRAY_FROM_MAIN = "register shared array (main->backend)"
+REGISTER_SHARED_ARRAY_FROM_MAIN   = "register shared array (main->backend)"
+REGISTER_SHARED_ARRAY_FOR_WORKER  = "register shared array (main->worker)"
+FORWARD_TO_WORKER                 = "forward to worker"
 
 class Back_End:
     def __init__(self, multiprocessing_context, manager, queue_from_frontend, queue_to_frontend, shared_dict,
@@ -35,10 +38,12 @@ class Back_End:
         # originating from either the frontend or the main process.
         # Event names from main must not collide with frontend-originated ones.
         self.main_comms         = None
-        self.main_shared_arrays = {} # key -> ndarray view (attached from main)
+        self.main_shared_arrays = {} # key -> SharedArray (attached from main)
         if queue_from_main is not None and queue_to_main is not None:
             self.main_comms = Communications(queue_from_main, queue_to_main, shared_dict, self.listeners)
-            self.listeners.add(REGISTER_SHARED_ARRAY_FROM_MAIN, self._on_register_shared_array_from_main)
+            self.listeners.add(REGISTER_SHARED_ARRAY_FROM_MAIN,  self._on_register_shared_array_from_main)
+            self.listeners.add(REGISTER_SHARED_ARRAY_FOR_WORKER, self._on_register_shared_array_for_worker)
+            self.listeners.add(FORWARD_TO_WORKER,                self._on_forward_to_worker)
 
         # CUDA manager (None until subclass assigns it, e.g. in routine()).
         # launch_worker_instance() calls self.cuda_manager.create_context(...)
@@ -114,18 +119,48 @@ class Back_End:
         return self.comms.shared.get(key, default=default)
 
     def get_main_shared_array(self, key):
-        """Return the numpy view for a shared array registered by the main process."""
+        """Return the `SharedArray` wrapper for a block registered by main."""
         return self.main_shared_arrays.get(key)
 
     def _on_register_shared_array_from_main(self, data):
-        """Default handler: main side allocated a shared-memory array and
-        sent us its descriptor. Attach to it and store the view."""
+        """Default handler: main side allocated (or reallocated) a shared-memory
+        array and sent us its descriptor. Attach (or re-attach on growth)."""
         key   = data["key"]
         name  = data["name"]
         shape = tuple(data["shape"])
         dtype = data["dtype"]
-        arr = self.main_comms.attach_shared_array(key, name, shape, dtype)
-        self.main_shared_arrays[key] = arr
+        if key in self.main_shared_arrays:
+            self.main_shared_arrays[key]._reattach(name, shape)
+        else:
+            self.main_shared_arrays[key] = SharedArray(self.main_comms, key, shape, dtype, name=name)
+
+    def _on_register_shared_array_for_worker(self, data):
+        """Main side allocated (or reallocated) a shared-memory array intended
+        for a specific worker instance. Attach on the backend side and forward
+        the descriptor to the worker. Payload: {instance_name, key, name,
+        shape, dtype}."""
+        instance_name = data["instance_name"]
+        key           = data["key"]
+        name          = data["name"]
+        shape         = tuple(data["shape"])
+        dtype         = data["dtype"]
+        if key in self.main_shared_arrays:
+            self.main_shared_arrays[key]._reattach(name, shape)
+        else:
+            self.main_shared_arrays[key] = SharedArray(self.main_comms, key, shape, dtype, name=name)
+        self.send_to_instance(
+            instance_name, "attach shared array",
+            {"key": key, "name": name, "shape": list(shape), "dtype": dtype},
+            require_ack=True,
+        )
+
+    def _on_forward_to_worker(self, data):
+        """Forward an event from main to a specific worker instance.
+        Payload: {instance_name, event_name, payload}."""
+        self.send_to_instance(
+            data["instance_name"], data["event_name"], data["payload"],
+            require_ack=True,
+        )
 
     # ------------------------------------------------- data-stream queue pool
     def _acquire_queue_pair(self):

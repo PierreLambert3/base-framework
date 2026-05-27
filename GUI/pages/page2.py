@@ -14,6 +14,7 @@ from GUI.engine.frontend.graphical_elements.graphical_element import Container
 from GUI.engine.frontend.graphical_elements.button import Button_2d
 from GUI.engine.frontend.graphical_elements.scatterplot_2d_dynamic import Scatterplot2DDynamic
 from GUI.engine.frontend.theme import AMBER, ORANGE_YELLOW, ORANGE_RED, PINK_ELECTRIC
+from GUI.engine.shared_array import SharedArray
 
 
 SMALL_N_POINTS = 1_000
@@ -69,7 +70,8 @@ class Scatterplots_Page(Page):
         self._spawn_order        = []   # list[instance_name] in spawn order
         self._instance_configs   = {}   # instance_name -> config dict
         self._scatterplots       = {}   # instance_name -> Scatterplot2DDynamic
-        self._positions_views    = {}   # instance_name -> ndarray view onto shared memory
+        self._positions_views    = {}   # instance_name -> SharedArray (attached)
+        self._positions_host_buf = {}   # instance_name -> local ndarray (copy target)
         self._scatter_counter    = 0    # for unique names across re-creates
 
     # ---------------------------------------------------- button callbacks
@@ -125,24 +127,21 @@ class Scatterplots_Page(Page):
             return # this instance is not using shared memory
         comms = self.frontend.data_stream_comms_per_instance[instance_name]["comms"]
         # Use a per-instance key in case multiple SHM arrays are added later.
-        arr = comms.attach_shared_array(
-            "positions",
-            shm_info["name"],
-            tuple(shm_info["shape"]),
-            np.dtype(shm_info["dtype"]),
-        )
-        self._positions_views[instance_name] = arr
+        shape = tuple(shm_info["shape"])
+        dtype = np.dtype(shm_info["dtype"])
+        shmem = SharedArray(comms, "positions", shape, dtype, name=shm_info["name"])
+        self._positions_views[instance_name]    = shmem
+        self._positions_host_buf[instance_name] = np.empty(shape, dtype=dtype)
 
     # ------------------------------------------------------ data stream
     def _handle_positions_ready(self, instance_name, data):
         scatter = self._scatterplots.get(instance_name)
-        arr     = self._positions_views.get(instance_name)
-        if scatter is None or arr is None:
+        shmem   = self._positions_views.get(instance_name)
+        if scatter is None or shmem is None:
             return
-        # Read directly from shared memory. `update_data` memcopies into the
-        # scatterplot's own swap buffer, so a torn read would at worst yield
-        # one bad frame -- acceptable for v1 (no seqlock).
-        scatter.update_data(arr[:, 0], arr[:, 1])
+        buf = self._positions_host_buf[instance_name]
+        shmem.copy_to_arr(buf)
+        scatter.update_data(buf[:, 0], buf[:, 1])
 
     # ---------------------------------------------------- grid layout
     def _grid_dims(self, n):
@@ -189,13 +188,11 @@ class Scatterplots_Page(Page):
         super().one_frame(mouse_coords)
 
     def destroy(self):
-        # Detach all attached shared arrays before tearing down the page so
+        # Close all attached shared arrays before tearing down the page so
         # the underlying handles are closed in this process. The owning worker
         # is responsible for `unlink`ing on its own exit.
-        for instance_name in list(self._positions_views.keys()):
-            comms_entry = self.frontend.data_stream_comms_per_instance.get(instance_name)
-            if comms_entry is not None:
-                try: comms_entry["comms"].release_shared_array("positions")
-                except Exception: pass
+        for instance_name, shmem in list(self._positions_views.items()):
+            shmem.close()
         self._positions_views.clear()
+        self._positions_host_buf.clear()
         super().destroy()

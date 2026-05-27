@@ -24,7 +24,6 @@ def drain_queue(q):
     except:
         pass
 
-
 if __name__ == "__main__":
 
     # 1. initialise the multiprocessing context

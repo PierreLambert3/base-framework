@@ -10,6 +10,7 @@ from cuda_wrapper import LaunchConfig1D, DeviceProperties
 
 from GUI.engine.worker.worker_instance import WorkerInstance
 from GUI.engine.worker.global_constants import TIMESTEP_DURATION_MS
+from GUI.engine.shared_array import SharedArray
 
 
 class _Kernels:
@@ -97,9 +98,7 @@ class CustomWorker(WorkerInstance):
         self._use_shared_memory = True
         self._frame_id          = 0
         if self._use_shared_memory:
-            self._positions_host = self.data_stream_comms.create_shared_array(
-                "positions", (n_points, 2), np.float32,
-            )
+            self._positions_host = SharedArray(self.data_stream_comms, "positions", (n_points, 2), np.float32)
         else:
             self._positions_host = np.empty((n_points, 2), dtype=np.float32)
 
@@ -131,7 +130,11 @@ class CustomWorker(WorkerInstance):
             self.kernels.update_positions(self.streams.compute, self, chunk_size)
 
         # 3. Copy positions back to the host (synchronous w.r.t. the stream).
-        self._positions_gpu.to_host(out=self._positions_host, stream=self.streams.compute)
+        if self._use_shared_memory:
+            with self._positions_host.write_view() as buf:
+                self._positions_gpu.to_host(out=buf, stream=self.streams.compute)
+        else:
+            self._positions_gpu.to_host(out=self._positions_host, stream=self.streams.compute)
         self.streams.compute.sync()
 
         # 4. Notify the frontend. With shared memory, the host buffer IS the

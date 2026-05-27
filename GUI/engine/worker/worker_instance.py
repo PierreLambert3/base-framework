@@ -13,6 +13,7 @@ import numpy as np
 from GUI.engine.worker.global_constants import TIMESTEP_DURATION_MS, SIMULATION_CHUNK_SIZE
 
 from GUI.engine.comms import _Listeners, Communications
+from GUI.engine.shared_array import SharedArray
 
 
 def comms_prefix(instance_name):
@@ -58,6 +59,9 @@ class WorkerInstance:
         # main communications (backend <-> instance)
         self.listeners = _Listeners()
         self.comms     = Communications(queue_from_backend, queue_to_backend, shared_dict, self.listeners)
+
+        # SharedArray wrappers attached on behalf of the main process.
+        self._shared_arrays = {} # key -> SharedArray
 
         # data stream communications (instance --> frontend, separate channel)
         self.data_stream_listeners = _Listeners()
@@ -129,6 +133,7 @@ class WorkerInstance:
         self.add_listener(prefix + "exit program",              self.exit_program)
         self.add_listener(prefix + "instance selected",         self._handle_instance_selected)
         self.add_listener(prefix + "instance deselected",       self._handle_instance_deselected)
+        self.add_listener(prefix + "attach shared array",       self._handle_attach_shared_array)
 
     def exit_program(self, data):
         self._on_exit(data)
@@ -178,3 +183,18 @@ class WorkerInstance:
 
     def _handle_instance_deselected(self, data):
         self.selected_by_frontend = False
+
+    def _handle_attach_shared_array(self, data):
+        """Default handler: backend forwarded a descriptor for a shared-memory
+        array owned by the main process. Attach (or re-attach on growth)."""
+        key   = data["key"]
+        name  = data["name"]
+        shape = tuple(data["shape"])
+        dtype = data["dtype"]
+        if key in self._shared_arrays:
+            self._shared_arrays[key]._reattach(name, shape)
+        else:
+            self._shared_arrays[key] = SharedArray(self.comms, key, shape, dtype, name=name)
+
+    def get_shared_array(self, key):
+        return self._shared_arrays.get(key)

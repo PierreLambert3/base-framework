@@ -176,13 +176,12 @@ class Communications:
         """Create a new shared-memory block big enough to hold a numpy array
         of the given shape and dtype. Returns a numpy view onto that block.
 
-        The owning process must keep the returned `Communications` alive for
-        the lifetime of the array (we hold a reference to the `SharedMemory`
-        handle in `_owned_shm`). Call `release_shared_array(key)` or
-        `release_all_shared_arrays()` to free it.
+        If `key` already refers to an owned or attached block, that block is
+        released first (owner side: close + unlink; attached side: close).
+        This enables growth by re-registration under the same key.
         """
-        assert key not in self._owned_shm,    f"Shared array '{key}' already owned by this Communications."
-        assert key not in self._attached_shm, f"Shared array '{key}' already attached to this Communications."
+        if key in self._owned_shm or key in self._attached_shm:
+            self.release_shared_array(key)
         dtype = np.dtype(dtype)
         n_bytes = int(np.prod(shape)) * dtype.itemsize
         shm = shared_memory.SharedMemory(create=True, size=n_bytes)
@@ -193,10 +192,10 @@ class Communications:
     def attach_shared_array(self, key, name, shape, dtype):
         """Attach to an existing shared-memory block by `name` (created by
         another process via `create_shared_array`). Returns a numpy view.
-        Call `release_shared_array(key)` or `release_all_shared_arrays()` to
-        detach (only the owning side should `unlink`)."""
-        assert key not in self._owned_shm,    f"Shared array '{key}' already owned by this Communications."
-        assert key not in self._attached_shm, f"Shared array '{key}' already attached to this Communications."
+        If `key` already refers to a block on this side, it is released first
+        (owner: close+unlink; attached: close)."""
+        if key in self._owned_shm or key in self._attached_shm:
+            self.release_shared_array(key)
         dtype = np.dtype(dtype)
         shm = shared_memory.SharedMemory(name=name)
         arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
@@ -225,15 +224,12 @@ class Communications:
         if key in self._owned_shm:
             shm, arr, _shape, _dtype = self._owned_shm.pop(key)
             del arr  # drop numpy view referencing the buffer
-            try: shm.close()
-            except Exception: pass
-            try: shm.unlink()
-            except Exception: pass
+            shm.close()
+            shm.unlink()
         elif key in self._attached_shm:
             shm, arr, _shape, _dtype = self._attached_shm.pop(key)
             del arr
-            try: shm.close()
-            except Exception: pass
+            shm.close()
 
     def release_all_shared_arrays(self):
         for key in list(self._attached_shm.keys()):
