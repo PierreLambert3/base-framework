@@ -13,7 +13,7 @@ from GUI.engine.frontend.page import Page
 from GUI.engine.frontend.graphical_elements.graphical_element import Container
 from GUI.engine.frontend.graphical_elements.button import Button_2d
 from GUI.engine.frontend.graphical_elements.scatterplot_2d_dynamic import Scatterplot2DDynamic
-from GUI.engine.frontend.theme import AMBER, ORANGE_YELLOW, PINK_ELECTRIC
+from GUI.engine.frontend.theme import AMBER, ORANGE_YELLOW, ORANGE_RED, PINK_ELECTRIC
 
 
 SMALL_N_POINTS = 1_000
@@ -27,11 +27,10 @@ GRID_SIZE = (0.96, 0.78)
 CELL_MARGIN = 0.04
 
 
-class Shared_Memory_Page(Page):
+class Scatterplots_Page(Page):
     """
-    Same UX as `Main_Page` (two spawn buttons + grid of scatterplots), but
-    every worker spawned from this page is configured to publish its position
-    array via `multiprocessing.shared_memory` instead of through the queue.
+    two spawn buttons + grid of scatterplots, every worker spawned from this page is configured to publish its position
+    array via Shared memory, as expected by the framework for large data transfers.
     """
 
     def __init__(self, scene, page_name, frontend, bl_xyz_px=(0, 0, 0), size_xyz_px=(2000, 1600, 0)):
@@ -42,16 +41,24 @@ class Shared_Memory_Page(Page):
         self.add_container(toolbar)
         self._btn_small = Button_2d(
             page_name + " btn small", toolbar, (0.10, 0.20), (0.30, 0.60),
-            text=f"spawn small instance ({SMALL_N_POINTS:,} pts) [SHM]",
+            text=f"spawn ({SMALL_N_POINTS:,} pts)",
             text_colour=AMBER, colour=AMBER,
             pointer_click_callback=self._on_spawn_small_clicked,
+            point_mode=1, line_mode=0
         )
         self._btn_big = Button_2d(
             page_name + " btn big", toolbar, (0.60, 0.20), (0.30, 0.60),
-            text=f"spawn big instance ({BIG_N_POINTS:,} pts)",
+            text=f"spawn ({BIG_N_POINTS:,} pts)",
             text_colour=AMBER, colour=AMBER,
             pointer_click_callback=self._on_spawn_big_clicked,
-            point_mode=0
+            point_mode=0, line_mode=1
+        )
+        self._btn_useless = Button_2d(
+            page_name + " btn useless", toolbar, (0.44, 0.02), (0.15, 0.14),
+            text=f"useless btn",
+            text_colour=ORANGE_RED, colour=AMBER,
+            pointer_click_callback=self._useless_button_clicked,
+            point_mode=1, line_mode=1
         )
 
         # Grid container holding the scatterplots
@@ -83,6 +90,9 @@ class Shared_Memory_Page(Page):
             },
             "instance_name_hint": "big-shm",
         })
+    
+    def _useless_button_clicked(self, event, element, page_coords):
+        print("useless button clicked")
 
     # ----------------------------------------- frontend lifecycle hook
     def on_new_worker_instance(self, instance_name, config):
@@ -94,8 +104,7 @@ class Shared_Memory_Page(Page):
 
         self._relayout_grid()
 
-        # Subscribe to this instance's SHM doorbell. The callback reads the
-        # pre-attached shared array (populated in `on_worker_instance_info`).
+        # Subscribe to this instance's shared memory events.
         self.frontend.add_data_stream_listener(
             instance_name,
             "data stream: positions ready",
@@ -103,11 +112,6 @@ class Shared_Memory_Page(Page):
         )
 
         # Tell the backend we're ready (it routes to the worker process).
-        # NOTE: do NOT signal ready here if we still need the worker's info
-        # message to arrive first -- but the existing protocol sends "info for
-        # frontend" BEFORE waiting on "frontend ready", so the info will be
-        # processed below in `on_worker_instance_info` by the time the doorbell
-        # starts firing.
         self.frontend.send("frontend ready for worker instance", instance_name)
 
     def on_worker_instance_info(self, info):

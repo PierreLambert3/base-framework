@@ -2,7 +2,8 @@ import numpy as np
 import pygfx
 import wgpu
 
-from GUI.engine.frontend.theme import AMBER, BONE, ORANGE_YELLOW, PINK_NEON, to_rgba
+from GUI.engine.frontend.theme import AMBER, BONE, ORANGE_YELLOW, PINK_NEON, to_rgba, DEFAULT_FONT_SIZE
+from GUI.engine.frontend.font_registry import get_family
 
 # HUD overlay: a persistent screen-space layer that sits in front of all pages.
 #
@@ -20,8 +21,8 @@ GAUGE_FILL_COLOR = to_rgba(BONE, 0.7)
 
 HUD_Z   = 20.0  # Z at which all HUD objects are placed.
 
-FPS_FONT_SIZE        = 22
-FPS_NUMBER_FONT_SIZE = 28
+FPS_FONT_SIZE        = 32 - 3
+FPS_NUMBER_FONT_SIZE = 32 + 4
 
 RECT_SIZE            = 55.0    # value-box side length (square, world units)
 
@@ -81,12 +82,17 @@ class KeyValueHUD:
         self._invert     = invert
 
         # -- text objects (both centred horizontally within the widget) --------
+        from GUI.engine.frontend import theme as _theme
+        _family = get_family(_theme.DEFAULT_FONT_NAME[0])
+        _font_kw = {"family": _family} if _family else {}
+
         self._key_obj = pygfx.Text(
             text=key_text,
             font_size=key_font_size,
             anchor="middle-center",
             screen_space=False,
             material=pygfx.TextMaterial(color=to_rgba(AMBER, SCALAR_KEY_ALPHA)),
+            **_font_kw,
         )
         scene.add(self._key_obj)
 
@@ -96,6 +102,7 @@ class KeyValueHUD:
             anchor="middle-center",
             screen_space=False,
             material=pygfx.TextMaterial(color=to_rgba(AMBER, SCALAR_VAL_ALPHA)),
+            **_font_kw,
         )
         scene.add(self._val_obj)
 

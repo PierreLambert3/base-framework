@@ -21,7 +21,7 @@ class Front_End:
         # 1. rendering
         self.scene               = None
         self.frame_time_EMA      = 1.0 / 32.0
-        self.last_frame_timstamp = time.time()
+        self.last_frame_timestamp = time.time()
         self.target_frametime    = 0.033
 
         # 2. communication
@@ -38,16 +38,15 @@ class Front_End:
 
     def set_fps(self, target_fps):
         self.target_frametime = 1.0 / max(MIN_FPS, target_fps)
-
-    def should_it_render(self):
+    
+    def delay_for_framerate(self):
         timestamp = time.time()
-        dt = timestamp - self.last_frame_timstamp
-        should_render = dt >= self.target_frametime
-        if should_render:
-            self.last_frame_timstamp = timestamp
-            self.frame_time_EMA = 0.95 * self.frame_time_EMA + (1 - 0.95) * dt
-            return True
-        return False
+        dt = timestamp - self.last_frame_timestamp
+        if dt < self.target_frametime:
+            time.sleep(self.target_frametime - dt)
+            self.last_frame_timestamp = time.time()
+        else:
+            self.last_frame_timestamp = timestamp
 
     def one_frame(self):
         raise Exception("--- Front_End.one_frame() should be implemented in the derived class! ---")

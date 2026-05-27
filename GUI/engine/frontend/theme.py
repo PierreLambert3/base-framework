@@ -22,6 +22,10 @@ BLUE_WIERDNESS   = "#0044FF"
 TRANSLUCENT_DARK_HIGHLIGHT = "#673D2D1D"
 DARK_HIGHLIGHT = "#90370047"
 
+DEFAULT_FONT_NAME = ["BitcountGridSingle", "VT323"]
+# DEFAULT_FONT_NAME = ["VT323", "BitcountGridSingle"]
+DEFAULT_FONT_SIZE = 42
+
 import numpy as np
 def interpolate_color(color1, color2, factor: float) -> str:
     c1 = np.array([int(color1[i:i+2], 16) for i in (1, 3, 5)])

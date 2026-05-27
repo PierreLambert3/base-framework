@@ -1,8 +1,9 @@
 import pygfx
 import numpy as np
 from GUI.engine.frontend.graphical_elements.graphical_element import Element_2d, Container
+from GUI.engine.frontend.font_registry import get_family
 from GUI.engine.frontend.graphical_elements.parallelepiped import Parallelepiped
-from GUI.engine.frontend.theme import transparent, ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, darken, PINK_NEON, BONE, PINK_ELECTRIC, ORANGE_RED, DARK_HIGHLIGHT
+from GUI.engine.frontend.theme import DEFAULT_FONT_SIZE, transparent, ORANGE_YELLOW, ORANGE_DARK, interpolate_color, brighten, darken, PINK_NEON, BONE, PINK_ELECTRIC, ORANGE_RED, DARK_HIGHLIGHT
 from GUI.engine.frontend import theme as _theme
 from GUI.engine.frontend.audio import play_hover_in, play_hover_out
 from GUI.engine.frontend import theme as _theme
@@ -85,10 +86,11 @@ class Button_2d(Element_2d):
     """
     
     def __init__(self, unique_name, parent, bl_xy_rel, size_xy_rel, text, 
-                 colour=None, text_colour=ORANGE_YELLOW, font_size=26,
+                 colour=None, text_colour=ORANGE_YELLOW, font_size=DEFAULT_FONT_SIZE,
                  background_colour=BLACK,
                  pointer_move_inside_callback=None, pointer_click_callback=None,
-                 toggleable=False, clickable=True, colour_scheme=None, bold=False, line_mode=1, point_mode=1, point_mode_params=None):
+                 toggleable=False, clickable=True, colour_scheme=None, bold=False, line_mode=1, point_mode=1, point_mode_params=None,
+                 font_name=_theme.DEFAULT_FONT_NAME[0]):
         super().__init__(unique_name, parent, bl_xy_rel, size_xy_rel, colour=colour, line_mode=line_mode, point_mode=point_mode, point_mode_params=point_mode_params)
         self.text = text
         self.text_colour = text_colour
@@ -99,6 +101,7 @@ class Button_2d(Element_2d):
         self.toggleable    = toggleable
         self.pressed       = False
         self.clickable     = clickable
+        self.font_name     = font_name
 
         # Colour scheme – build from explicit overrides or derive from base colours
         if colour_scheme is not None:
@@ -270,13 +273,17 @@ class Button_2d(Element_2d):
             
     
     def _make_text(self, bold=False):
-        self.text_obj = pygfx.Text(
+        family = get_family(self.font_name)
+        text_kwargs = dict(
             text=self.text,
             font_size=self.font_size,
             anchor="middle-center",
             screen_space=False,
-            material=pygfx.TextMaterial(color=self.text_colour)
+            material=pygfx.TextMaterial(color=self.text_colour),
         )
+        if family is not None:
+            text_kwargs['family'] = family
+        self.text_obj = pygfx.Text(**text_kwargs)
         if bold:
             self.text_obj.set_markdown(f"**{self.text}**")
         self.text_obj.local.position = self.center

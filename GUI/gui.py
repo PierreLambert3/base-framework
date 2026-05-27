@@ -12,12 +12,11 @@ import numpy as np
 from GUI.engine.comms import _Listeners, Communications
 from GUI.engine.frontend.logic import Front_End
 from GUI.pages.IntroPage import Intro_Page
-from GUI.pages.MainPage  import Main_Page
-from GUI.pages.SharedMemoryPage import Shared_Memory_Page
+from GUI.pages.page2 import Scatterplots_Page
 from GUI.engine.worker.global_constants import SIMULATION_CHUNK_SIZE
 
 FRAME_TIMER = True
-TARGET_FPS  = 24
+TARGET_FPS  = 20
 
 class Custom_Frontend(Front_End):
     def __init__(self, multiprocessing_context, queue_from_backend, queue_to_backend, shared_dict, window_name="Custom GUI Frontend Window"):
@@ -57,11 +56,9 @@ class Custom_Frontend(Front_End):
         self.add_listener("worker instance info",                       self._handle_worker_instance_info)
 
     def _ensure_cuda_context(self):
-        """Idempotently bring up a single, frontend-wide CUDA context.
-
-        Called the first time any page constructs its ``PointsModeManager``.
-        Subsequent calls are no-ops; the context is torn down in
-        :meth:`exit_program`.
+        """
+        called the first time any page constructs its ``PointsModeManager``.
+        the context is freed in exit_program()
         """
         if self.cuda_ctx is not None:
             return
@@ -71,8 +68,10 @@ class Custom_Frontend(Front_End):
         self.cuda_ctx.enter()
 
     def _handle_worker_instance_info(self, data):
-        """Project-specific metadata sent by a worker instance once it has
-        finished `initialise()`. Forwarded to the current page if it cares."""
+        """
+        Project-specific metadata sent by a worker instance once it is initialised. 
+        Forwarded to the current page if it cares.
+        """
         if self.current_page is not None and hasattr(self.current_page, "on_worker_instance_info"):
             self.current_page.on_worker_instance_info(data)
     
@@ -84,26 +83,15 @@ class Custom_Frontend(Front_End):
         self.add_page(Intro_Page(self.scene, "The Main Page", self))
         if self.overlay is not None:
             self.overlay.page_changed(self.current_page)
-    
-    def switch_to_main_page(self):
-        self.set_fps(TARGET_FPS)
-        if self.current_page is not None:
-            self.current_page.destroy()
-        self.scene.camera.local.position = (1000, 800, 2000)
-        self._set_camera_look_at((1000, 800, 0.0))
-        self._store_default_camera_state()
-        self.add_page(Main_Page(self.scene, "main page", self))
-        if self.overlay is not None:
-            self.overlay.page_changed(self.current_page)
 
-    def switch_to_shared_memory_page(self):
+    def switch_to_scatterplotPage(self):
         self.set_fps(TARGET_FPS)
         if self.current_page is not None:
             self.current_page.destroy()
         self.scene.camera.local.position = (1000, 800, 2000)
         self._set_camera_look_at((1000, 800, 0.0))
         self._store_default_camera_state()
-        self.add_page(Shared_Memory_Page(self.scene, "shared memory page", self))
+        self.add_page(Scatterplots_Page(self.scene, "scatterplots page", self))
         if self.overlay is not None:
             self.overlay.page_changed(self.current_page)
     
@@ -122,8 +110,10 @@ class Custom_Frontend(Front_End):
         self.data_stream_comms_per_instance[instance_name]["listeners"].add(event_name, callback)
 
     def _handle_new_worker_instance_created(self, data):
-        """Backend has spawned a worker instance: hook up data stream comms,
-        and let the current page allocate visualisation resources."""
+        """
+        Backend has spawned a worker instance: attach data stream comms,
+        and let the current page allocate visualisation resources.
+        """
         instance_name = data["instance name"]
         config        = data.get("config", {})
         q_from_back, q_to_back = data["data_stream_queues"]
@@ -137,7 +127,6 @@ class Custom_Frontend(Front_End):
             self.current_page.on_new_worker_instance(instance_name, config)
     
     def _store_default_camera_state(self):
-        """Store the current camera position and orientation as the default state."""
         pos = self.scene.camera.local.position
         pos_arr = np.array([pos[0], pos[1], pos[2]], dtype=float)
         self.default_camera_position = pos_arr
@@ -285,12 +274,9 @@ class Custom_Frontend(Front_End):
         pass
 
     def one_frame(self):
-        # limit framerate to target fps (set with .set_fps())
-        if not self.should_it_render():
-            self.scene.canvas.request_draw(self.one_frame) # schedule next frame
-            return
-        
         self.counter_to_1000 = (self.counter_to_1000 + 1) % 1000
+
+        self.delay_for_framerate() # limit framerate to target fps (set with .set_fps())
         
         fps_alpha = 0.5
         if FRAME_TIMER:
@@ -318,6 +304,7 @@ class Custom_Frontend(Front_End):
                 self.overlay.update_perf_stats(pct_time_active, FPS_total)
                 
             self.last_tic = time.time()
+        
 
     def process_messages(self):
         self.comms.process_messages()
