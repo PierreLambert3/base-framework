@@ -36,8 +36,7 @@ class Custom_Frontend(Front_End):
         self.current_look_at_target  = None
         self.look_at_lerp_factor     = 0.23
 
-        # CUDA context (lazily entered the first time a page asks for points
-        # mode via `_ensure_cuda_context()`).
+        # CUDA context (lazily entered the first time a page asks for points mode via _ensure_cuda_context()).
         self.cuda_manager = None
         self.cuda_ctx     = None
 
@@ -57,7 +56,6 @@ class Custom_Frontend(Front_End):
 
     def _ensure_cuda_context(self):
         """
-        called the first time any page constructs its ``PointsModeManager``.
         the context is freed in exit_program()
         """
         if self.cuda_ctx is not None:

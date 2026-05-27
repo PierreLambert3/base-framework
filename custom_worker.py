@@ -94,16 +94,13 @@ class CustomWorker(WorkerInstance):
         # or a shared-memory block (`use_shared_memory: True` in config). The
         # shared block is owned by this worker; its name is shipped to the
         # frontend via `_make_info_for_frontend`.
-        self._use_shared_memory = bool(self.config.get("use_shared_memory", False))
+        self._use_shared_memory = True
         self._frame_id          = 0
         if self._use_shared_memory:
-            # `data_stream_comms` owns the SHM block (matches the channel the
-            # frontend listens on for the doorbell notification).
             self._positions_host = self.data_stream_comms.create_shared_array(
                 "positions", (n_points, 2), np.float32,
             )
         else:
-            # Pre-allocated host buffer for D->H transfers (avoids per-chunk allocation).
             self._positions_host = np.empty((n_points, 2), dtype=np.float32)
 
     def _on_exit(self, data):
@@ -114,9 +111,7 @@ class CustomWorker(WorkerInstance):
         info = super()._make_info_for_frontend()
         info["n_points"] = self._n_points
         if self._use_shared_memory:
-            info["shared_memory"] = {
-                "positions": self.data_stream_comms.get_shared_array_info("positions"),
-            }
+            info["shared_memory"] = { "positions": self.data_stream_comms.get_shared_array_info("positions")}
         return info
 
     def run_simulation_chunk(self, chunk_size, selected_by_frontend, high_speed_mode):

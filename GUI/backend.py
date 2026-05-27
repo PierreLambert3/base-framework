@@ -27,21 +27,24 @@ class Custom_Backend(Back_End):
     payload is `{"config": <opaque dict>, "instance_name_hint": <str|None>}`.
     """
 
-    def __init__(self, multiprocessing_context, manager, queue_from_frontend, queue_to_frontend, shared_dict):
-        super().__init__(multiprocessing_context, manager, queue_from_frontend, queue_to_frontend, shared_dict)
+    def __init__(self, multiprocessing_context, manager, queue_from_frontend, queue_to_frontend, shared_dict,
+                 queue_from_main=None, queue_to_main=None, max_worker_instances=8):
+        super().__init__(multiprocessing_context, manager, queue_from_frontend, queue_to_frontend, shared_dict,
+                         queue_from_main=queue_from_main, queue_to_main=queue_to_main,
+                         max_worker_instances=max_worker_instances)
 
-        # CUDA: one manager in the main (backend) process. Detects the device and
-        # provides per-process configuration; the actual CUDA context for each
-        # worker is created here (un-entered) and entered inside the child process.
-        self.cuda_manager = CUDAManager(device_id=0, kernel_dir="kernels")
+        # CUDA: initialized to None so __init__ stays picklable for async
+        # backend mode. Constructed in routine() once inside the actual process.
+        self.cuda_manager = None
 
         # spawned worker processes
-        self.worker_instance_names = []
-        self.worker_processes      = []
-        self.comms_instances       = []
-        self.cuda_contexts         = []  # un-entered CUDAContext per instance
-        self.data_stream_queues    = []  # tuples (front_to_back, back_to_front) from frontend's POV
-        self.n_instances_created   = 0
+        self.worker_instance_names     = []
+        self.worker_processes          = []
+        self.comms_instances           = []
+        self.cuda_contexts             = []  # un-entered CUDAContext per instance
+        self.data_stream_queues        = []  # tuples (front_to_back, back_to_front) from frontend's POV
+        self.data_stream_queue_indices = []  # corresponding pool slot indices
+        self.n_instances_created       = 0
 
         # default state
         self.simulation_chunk_size = 1
@@ -50,7 +53,11 @@ class Custom_Backend(Back_End):
         self.build_listeners()
 
     # --------------------------------------------------------------- main loop
+
     def routine(self):
+        if self.cuda_manager is None:
+            self.cuda_manager = CUDAManager(device_id=0, kernel_dir="kernels")
+
         # ask the frontend for the initial chunk size
         self.send("Q1: how many timesteps per simulation chunk", None)
         while self.running:
@@ -67,6 +74,7 @@ class Custom_Backend(Back_End):
         self.add_listener("exit program",                                  self.exit_program)
         self.add_listener("RE1.1: how many timesteps per simulation chunk", self._set_simulation_chunk_size)
         self.add_listener("launch worker instance",                        self._handle_launch_worker_instance)
+        self.add_listener("deallocate worker instance",                    self._handle_deallocate_worker_instance)
         self.add_listener("frontend ready for worker instance",           self._handle_frontend_ready_for_worker_instance)
         self.add_listener("worker instance deselected",                    self._handle_instance_deselected)
         self.add_listener("info for frontend",                             self._handle_info_from_instance)
@@ -108,9 +116,14 @@ class Custom_Backend(Back_End):
         subprocess_to_backend = self.multiprocessing_context.Queue()
         comms_to_instance     = Communications(subprocess_to_backend, backend_to_subprocess, self.comms.shared, self.listeners)
 
-        # 2. data stream queues (instance --> frontend visualisation)
-        data_stream_front_to_back = self.manager.Queue()
-        data_stream_back_to_front = self.manager.Queue()
+        # 2. data stream queues (instance --> frontend visualisation) — drawn from
+        #    the pre-allocated pool so no Manager is needed in the subprocess.
+        acquired = self._acquire_queue_pair()
+        if acquired is None:
+            print(f"WARNING: queue pool exhausted — cannot launch '{instance_name}'")
+            self.send("worker instance launch refused", {"reason": "queue pool exhausted"})
+            return None
+        queue_index, data_stream_front_to_back, data_stream_back_to_front = acquired
 
         # 3. CUDA context: created here (in the main process) but NOT entered.
         #    The child process will enter it inside its own routine().
@@ -132,6 +145,7 @@ class Custom_Backend(Back_End):
         self.comms_instances.append(comms_to_instance)
         self.cuda_contexts.append(cuda_ctx)
         self.data_stream_queues.append((data_stream_front_to_back, data_stream_back_to_front))
+        self.data_stream_queue_indices.append(queue_index)
 
         # 5. push the current chunk size to the new instance
         self.send_to_instance(instance_name, "set simulation chunk size", self.simulation_chunk_size, require_ack=False)
@@ -174,6 +188,28 @@ class Custom_Backend(Back_End):
         """`data` is the instance_name. Sent by frontend once it has allocated
         the visualisation resources for this instance."""
         self.send_to_instance(data, "frontend ready", None, require_ack=False)
+
+    def _handle_deallocate_worker_instance(self, data):
+        self.deallocate_worker_instance(data)
+
+    def deallocate_worker_instance(self, instance_name):
+        try:
+            i = self.worker_instance_names.index(instance_name)
+        except ValueError:
+            print(f"WARNING: deallocate_worker_instance('{instance_name}') — instance not found")
+            return
+        self.send_to_instance(instance_name, "exit program", None, require_ack=False)
+        self.worker_processes[i].join(timeout=5.0)
+        if self.worker_processes[i].is_alive():
+            self.worker_processes[i].terminate()
+            self.worker_processes[i].join()
+        self._release_queue_pair(self.data_stream_queue_indices[i])
+        self.worker_instance_names.pop(i)
+        self.worker_processes.pop(i)
+        self.comms_instances.pop(i)
+        self.cuda_contexts.pop(i)
+        self.data_stream_queues.pop(i)
+        self.data_stream_queue_indices.pop(i)
 
     def _handle_info_from_instance(self, data):
         """A worker instance announces project-specific metadata once at
