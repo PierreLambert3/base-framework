@@ -116,7 +116,7 @@ class WorkerInstance:
 
         # 3. announce ourselves and wait until the frontend is ready
         self.comms.send("info for frontend", self._make_info_for_frontend())
-        while not self.frontend_ready_for_simulation:
+        while not self.frontend_ready_for_simulation and self.running:
             time.sleep(0.1)
             self.process_messages()
 
